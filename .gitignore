@@ -6,6 +6,8 @@ __pycache__/
 # Artefactos de compilacion
 build/
 dist/
+dist_installer/
+*.zip
 *.spec.bak
 
 # Salidas de prueba
