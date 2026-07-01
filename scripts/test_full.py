@@ -132,13 +132,21 @@ splitters = win.centralWidget().findChildren(QSplitter)
 check("hay un QSplitter en la ventana principal", len(splitters) == 1)
 
 # --- calculo de plazos AEAT ---
+import datetime as _dt
 d_general = T.fecha_general_periodo("1T", 2026)
 d_domicilio = T.fecha_domiciliacion_periodo("1T", 2026)
-check("domiciliacion es 5 dias antes que la fecha general",
+check("domiciliacion 1T 2026 son 3 dias habiles antes (aqui coincide con 5 naturales)",
       (d_general - d_domicilio).days == 5)
 check("fecha general nunca cae en sabado/domingo/festivo",
       d_general.weekday() < 5 and not T.es_festivo(d_general))
 check("plazo_por_defecto usa la domiciliacion", T.plazo_por_defecto("1T", 2026) == d_domicilio)
+
+# --- 4T vence el dia 30 de enero (no el 20), verificado contra el calendario oficial AEAT ---
+d_general_4t = T.fecha_general_periodo("4T", 2025)   # 4T de 2025 se presenta en enero de 2026
+d_domicilio_4t = T.fecha_domiciliacion_periodo("4T", 2025)
+check("4T vence el 30 de enero (oficial AEAT 2026)", d_general_4t == _dt.date(2026, 1, 30))
+check("domiciliacion 4T enero 2026 es el 27 (oficial AEAT: 3 dias habiles, sin fin de semana de por medio)",
+      d_domicilio_4t == _dt.date(2026, 1, 27))
 
 # --- utilidades: nombre de archivo sin colision ---
 from avisos.util import ruta_sin_colision

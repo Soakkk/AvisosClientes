@@ -34,6 +34,10 @@ MESES = [
 ]
 
 # Periodos disponibles: clave -> etiqueta larga, meses[0-based] y plazo por defecto
+# El 4T no vence el dia 20 como los demas trimestres: al coincidir con los
+# resumenes anuales (mod. 390, 190, 180, 347...) su plazo general se
+# extiende hasta el dia 30 de enero (confirmado en el calendario oficial
+# de la AEAT).
 PERIODOS = {
     "1T": {"largo": "1.er Trimestre", "corto": "1T", "meses": [0, 1, 2],
            "plazo": (4, 20), "anio_offset": 0},
@@ -42,7 +46,7 @@ PERIODOS = {
     "3T": {"largo": "3.er Trimestre", "corto": "3T", "meses": [6, 7, 8],
            "plazo": (10, 20), "anio_offset": 0},
     "4T": {"largo": "4.º Trimestre", "corto": "4T", "meses": [9, 10, 11],
-           "plazo": (1, 20), "anio_offset": 1},
+           "plazo": (1, 30), "anio_offset": 1},
     "RENTA": {"largo": "Ejercicio (Renta)", "corto": "Renta", "meses": list(range(12)),
               "plazo": (6, 30), "anio_offset": 0},
 }
@@ -82,9 +86,10 @@ def _viernes_santo(anio: int) -> date:
 def es_festivo(d: date) -> bool:
     """Festivos nacionales fijos + Viernes Santo.
 
-    Nota: no incluye festivos autonomicos/locales (p. ej. de Murcia), solo
-    los nacionales. Para fechas cercanas a un festivo regional, conviene
-    revisar el calendario oficial de la AEAT.
+    La propia AEAT considera inhabiles tambien los festivos autonomicos y
+    locales, pero aqui solo se comprueban los nacionales fijos y el
+    Viernes Santo (movil). Para fechas cercanas a un festivo regional de
+    Murcia, conviene revisar el calendario oficial de la AEAT.
     """
     if (d.month, d.day) in FESTIVOS_FIJOS:
         return True
@@ -109,23 +114,33 @@ def _siguiente_dia_habil(d: date) -> date:
     return d
 
 
+def _restar_dias_habiles(d: date, n: int) -> date:
+    while n > 0:
+        d -= timedelta(days=1)
+        if d.weekday() < 5 and not es_festivo(d):
+            n -= 1
+    return d
+
+
 def fecha_general_periodo(clave: str, anio: int) -> date:
-    """Fecha limite general de presentacion (dia 20, o el habil siguiente
+    """Fecha limite general de presentacion (dia 20, excepto el 4T que es
+    dia 30 por coincidir con los resumenes anuales; o el habil siguiente
     si cae en sabado, domingo o festivo)."""
     info = PERIODOS[clave]
     mes, dia = info["plazo"]
     base = date(anio + info["anio_offset"], mes, dia)
-    if clave == "RENTA":
-        return _siguiente_dia_habil(base)
     return _siguiente_dia_habil(base)
 
 
 def fecha_domiciliacion_periodo(clave: str, anio: int) -> date:
-    """Fecha limite para domiciliar el pago: la fecha general menos 5 dias
-    naturales (regla de la AEAT). No se vuelve a ajustar por festivos."""
+    """Fecha limite para domiciliar el pago: 3 dias habiles antes de la
+    fecha general (regla de la AEAT: minimo 3 dias habiles/5 naturales de
+    separacion). No es un "-5 naturales" fijo: coincide con -5 cuando de
+    por medio hay un fin de semana, pero da -3 cuando no lo hay (p. ej. en
+    enero, si el dia 30 cae entre martes y viernes)."""
     if clave == "RENTA":
         return fecha_general_periodo(clave, anio)
-    return fecha_general_periodo(clave, anio) - timedelta(days=5)
+    return _restar_dias_habiles(fecha_general_periodo(clave, anio), 3)
 
 
 def plazo_por_defecto(clave: str, anio: int) -> date:

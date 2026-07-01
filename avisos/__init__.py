@@ -1,2 +1,2 @@
 """Generador de avisos – Asesoría E. Marín."""
-__version__ = "1.2.0"
+__version__ = "1.2.1"

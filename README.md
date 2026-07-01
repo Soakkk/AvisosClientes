@@ -41,11 +41,16 @@ periodo, año, fecha límite, nombre del cliente y la lista de documentos.
 ## Cálculo de plazos (AEAT)
 
 En `avisos/templates.py` (`fecha_general_periodo`, `fecha_domiciliacion_periodo`) se calcula
-la fecha límite del día 20 de cada trimestre, retrasándola al siguiente día hábil si cae en
-sábado, domingo, festivo nacional fijo o Viernes Santo (calculado por fórmula, no festivos
-autonómicos/locales). La fecha de domiciliación es esa fecha ajustada menos 5 días naturales,
-sin volver a reajustar. **Importante:** solo cubre festivos nacionales — conviene revisar el
-calendario oficial de la AEAT en fechas señaladas o con festivos locales de Murcia.
+la fecha límite general de cada trimestre (día 20 para 1T/2T/3T; **día 30 para el 4T**, porque
+coincide con los resúmenes anuales), retrasándola al siguiente día hábil si cae en sábado,
+domingo, festivo nacional fijo o Viernes Santo (calculado por fórmula, no festivos
+autonómicos/locales). La fecha de domiciliación son **3 días hábiles antes** de esa fecha
+ajustada (no un "-5 naturales" fijo: coincide con -5 cuando de por medio hay fin de semana,
+pero da -3 si no lo hay, como pasa en enero). Verificado contra el calendario oficial de la
+AEAT para 2026 (4T 2025: general 30/01/2026, domiciliación 27/01/2026).
+**Importante:** solo cubre festivos nacionales — conviene revisar el calendario oficial de la
+AEAT en fechas señaladas o con festivos locales de Murcia, que la propia AEAT sí tiene en
+cuenta para estos cálculos.
 
 ## Estética / manual de estilo
 
