@@ -15,6 +15,7 @@ from PySide6.QtGui import (
 from PySide6.QtPrintSupport import QPrinter
 
 from . import config
+from . import estilo as E
 from .templates import Contexto, Plantilla, render_cuerpo, render_titulo
 
 # A4 en mm
@@ -24,6 +25,13 @@ MARGEN_X = 20.0
 MARGEN_SUP = 16.0
 MARGEN_INF = 16.0
 
+# Tamanos del titulo y el pie de pagina, como diferencia respecto al
+# tamano de letra del cuerpo (configurable por el usuario), para que todo
+# escale junto de forma proporcional.
+DELTA_TITULO = 4.5
+DELTA_PIE_NEGRITA = -2.0
+DELTA_PIE_NORMAL = -2.5
+
 # QTextDocument, cuando no esta asociado a un dispositivo concreto, siempre
 # interpreta sus medidas (textWidth, tamanos de fuente) como si el destino
 # tuviera 96 DPI - da igual la resolucion real del QPrinter/QImage donde
@@ -31,25 +39,21 @@ MARGEN_INF = 16.0
 # alta resolucion (p. ej. 1200 DPI) el cuerpo del texto sale minusculo.
 _QTEXTDOCUMENT_DPI = 96.0
 
-def cargar_fuente() -> str:
-    """Fuente estandar del sistema (Georgia): sin incrustar nada, sin
-    fuentes variables (que en algunas impresoras/PDF eligen mal el grosor)."""
-    return config.SERIF_FALLBACK
-
 
 def _mm(px_per_mm: float, mm: float) -> float:
     return mm * px_per_mm
 
 
-def _doc_cuerpo(html: str, ancho_px: float, base_pt: float) -> QTextDocument:
+def _doc_cuerpo(html: str, ancho_px: float, est: E.Estilo) -> QTextDocument:
     doc = QTextDocument()
     doc.setDocumentMargin(0)
-    f = QFont(cargar_fuente())
-    f.setPointSizeF(base_pt)
+    f = QFont(est.fuente)
+    f.setPointSizeF(est.tamano_cuerpo)
     doc.setDefaultFont(f)
     doc.setTextWidth(ancho_px)
     doc.setDefaultStyleSheet(
-        f"p{{color:{config.INK};line-height:135%;}}"
+        f"p{{color:{config.INK};line-height:{est.interlineado}%;"
+        f"margin:{est.espacio_parrafo}pt 0;}}"
         f"li{{color:{config.INK};margin:2pt 0;}}"
         f"b{{color:{config.GREEN_SOFT};}}"
     )
@@ -59,15 +63,18 @@ def _doc_cuerpo(html: str, ancho_px: float, base_pt: float) -> QTextDocument:
 
 def pintar_pagina(painter: QPainter, ancho_px: float, alto_px: float,
                   res_dpi: float, titulo: str, cuerpo_html: str,
-                  info: dict | None = None) -> None:
+                  info: dict | None = None, est: E.Estilo | None = None) -> None:
     """Dibuja el aviso completo dentro de un area ancho_px x alto_px.
 
     `titulo` y `cuerpo_html` ya vienen resueltos (placeholders sustituidos).
     Si se pasa `info`, se rellena con info["desborda"] = True/False segun
     si el cuerpo del texto cabe en el espacio disponible de la pagina.
+    Si no se pasa `est` (fuente/tamano/interlineado), se usa el guardado
+    por el usuario (o el de fabrica si no ha configurado nada).
     """
+    est = est or E.cargar()
     ppm = res_dpi / 25.4  # pixeles por mm
-    serif = cargar_fuente()
+    fuente = est.fuente
 
     x0 = _mm(ppm, MARGEN_X)
     content_w = ancho_px - 2 * x0
@@ -90,8 +97,8 @@ def pintar_pagina(painter: QPainter, ancho_px: float, alto_px: float,
     y += _mm(ppm, 7)
 
     # --- Titulo ---
-    ft = QFont(serif)
-    ft.setPointSizeF(15.5)
+    ft = QFont(fuente)
+    ft.setPointSizeF(est.tamano_cuerpo + DELTA_TITULO)
     ft.setBold(True)
     painter.setFont(ft)
     painter.setPen(QColor(config.GREEN))
@@ -113,7 +120,7 @@ def pintar_pagina(painter: QPainter, ancho_px: float, alto_px: float,
     content_w_doc = content_w / escala_doc
     alto_disponible_doc = (alto_px - y) / escala_doc
 
-    doc = _doc_cuerpo(cuerpo_html, content_w_doc, 11.0)
+    doc = _doc_cuerpo(cuerpo_html, content_w_doc, est)
     if info is not None:
         info["desborda"] = (doc.size().height() * escala_doc) > (pie_y - y)
     painter.save()
@@ -126,11 +133,11 @@ def pintar_pagina(painter: QPainter, ancho_px: float, alto_px: float,
     painter.fillRect(QRectF(x0, pie_y, content_w, _mm(ppm, 0.5)), QColor(config.GOLD))
     pie_y += _mm(ppm, 2.5)
 
-    fp_bold = QFont(serif)
-    fp_bold.setPointSizeF(9.0)
+    fp_bold = QFont(fuente)
+    fp_bold.setPointSizeF(est.tamano_cuerpo + DELTA_PIE_NEGRITA)
     fp_bold.setBold(True)
-    fp = QFont(serif)
-    fp.setPointSizeF(8.5)
+    fp = QFont(fuente)
+    fp.setPointSizeF(est.tamano_cuerpo + DELTA_PIE_NORMAL)
     painter.setPen(QColor(config.GREEN))
 
     lineas = [
@@ -138,19 +145,19 @@ def pintar_pagina(painter: QPainter, ancho_px: float, alto_px: float,
         (fp, f"{config.COMPANY_DIRECCION} · {config.COMPANY_TELEFONOS}"),
         (fp, config.COMPANY_EMAIL),
     ]
-    for fuente, texto in lineas:
-        painter.setFont(fuente)
+    for fuente_linea, texto in lineas:
+        painter.setFont(fuente_linea)
         r = QRectF(x0, pie_y, content_w, _mm(ppm, 5))
         painter.drawText(r, int(Qt.AlignHCenter | Qt.AlignTop), texto)
         pie_y += _mm(ppm, 4.2)
 
 
 def render_preview_textos(titulo: str, cuerpo_html: str, dpi: float = 110.0,
-                           info: dict | None = None) -> QImage:
+                           info: dict | None = None, est: E.Estilo | None = None) -> QImage:
     """Devuelve una QImage A4 a partir de un titulo y un cuerpo ya resueltos.
 
-    Se usa en el editor de plantillas para previsualizar texto todavia sin
-    guardar, sin necesidad de pasar por el sistema de overrides.
+    Se usa en el editor de plantillas y el editor de formato para
+    previsualizar cambios todavia sin guardar.
     """
     ppm = dpi / 25.4
     w = int(round(A4_W_MM * ppm))
@@ -162,22 +169,22 @@ def render_preview_textos(titulo: str, cuerpo_html: str, dpi: float = 110.0,
     p.setRenderHint(QPainter.TextAntialiasing, True)
     p.setRenderHint(QPainter.SmoothPixmapTransform, True)
     try:
-        pintar_pagina(p, w, h, dpi, titulo, cuerpo_html, info=info)
+        pintar_pagina(p, w, h, dpi, titulo, cuerpo_html, info=info, est=est)
     finally:
         p.end()
     return img
 
 
 def render_preview(ctx: Contexto, plantilla: Plantilla, dpi: float = 110.0,
-                    info: dict | None = None) -> QImage:
+                    info: dict | None = None, est: E.Estilo | None = None) -> QImage:
     """Devuelve una QImage A4 con el aviso (para la vista previa)."""
     titulo = render_titulo(ctx, plantilla)
     cuerpo_html = render_cuerpo(ctx, plantilla)
-    return render_preview_textos(titulo, cuerpo_html, dpi=dpi, info=info)
+    return render_preview_textos(titulo, cuerpo_html, dpi=dpi, info=info, est=est)
 
 
 def render_pdf(ctx: Contexto, plantilla: Plantilla, ruta: str | Path,
-                info: dict | None = None) -> None:
+                info: dict | None = None, est: E.Estilo | None = None) -> None:
     """Genera el PDF del aviso en `ruta`."""
     titulo = render_titulo(ctx, plantilla)
     cuerpo_html = render_cuerpo(ctx, plantilla)
@@ -195,6 +202,7 @@ def render_pdf(ctx: Contexto, plantilla: Plantilla, ruta: str | Path,
     try:
         res = printer.resolution()
         page = printer.pageRect(QPrinter.DevicePixel)
-        pintar_pagina(painter, page.width(), page.height(), res, titulo, cuerpo_html, info=info)
+        pintar_pagina(painter, page.width(), page.height(), res, titulo, cuerpo_html,
+                      info=info, est=est)
     finally:
         painter.end()

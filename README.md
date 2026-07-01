@@ -33,6 +33,9 @@ periodo, año, fecha límite, nombre del cliente y la lista de documentos.
   una copia en PDF individual por cada cliente elegido.
 - **Historial** de avisos generados, con búsqueda por cliente y acceso directo al PDF.
 - **Editor de plantillas** para cambiar los textos desde la propia aplicación, sin tocar código.
+- **Formato del documento** (Herramientas → Formato del documento…): fuente, tamaño de letra,
+  interlineado y espacio entre párrafos configurables al estilo Word, con vista previa en
+  vivo. Se guarda y se aplica a todos los avisos futuros.
 - **Generar y guardar PDF** guarda automáticamente en el Escritorio con el nombre del
   cliente y el tipo de aviso (sin diálogo de guardado).
 - **Comprobación de actualizaciones** contra los releases de GitHub (automática al abrir,
@@ -55,10 +58,13 @@ cuenta para estos cálculos.
 ## Estética / manual de estilo
 
 Todo lo que define el estilo está centralizado en [`avisos/config.py`](avisos/config.py):
-colores (verde `#2E4A3C`, dorado `#B8995A`), datos del pie de página y tipografía
-(**Georgia**, fuente estándar de Windows; se descartó una fuente variable incrustada
+colores (verde `#2E4A3C`, dorado `#B8995A`) y datos del pie de página. La tipografía
+(fuente, tamaño, interlineado y espacio entre párrafos) se guarda aparte, en
+[`avisos/estilo.py`](avisos/estilo.py) (`%APPDATA%\AvisosEMarin\estilo.json`), y es
+configurable por el usuario desde Herramientas → Formato del documento. Por defecto es
+**Georgia** (fuente estándar de Windows); se descartó una fuente variable incrustada
 porque algunas exportan mal el grosor —todo en negrita— al generar el PDF, aunque en
-pantalla se vieran bien).
+pantalla se vieran bien.
 
 Para cambiar el logo, basta con dejar un archivo cuyo nombre empiece por `EM_logo`
 en la carpeta `assets/`. Si pones un **PNG con fondo transparente** se usará ese
@@ -97,10 +103,11 @@ AvisosClientes/
 │  ├─ config.py      # manual de estilo: colores, datos fijos, rutas
 │  ├─ templates.py   # plantillas, motor de sustitución y overrides editables
 │  ├─ render.py      # composición y export a PDF / vista previa
+│  ├─ estilo.py      # fuente/tamaño/interlineado configurables (JSON)
 │  ├─ clients.py     # base de datos de clientes (JSON)
 │  ├─ history.py     # historial de avisos generados (JSON)
 │  ├─ util.py        # nombre de archivo sugerido
-│  ├─ ui/            # diálogos: clientes, lote, historial, editor de plantillas
+│  ├─ ui/            # diálogos: clientes, lote, historial, editor de plantillas y formato
 │  ├─ app.py         # ventana principal (PySide6)
 │  └─ main.py        # arranque
 ├─ assets/           # logo e icono

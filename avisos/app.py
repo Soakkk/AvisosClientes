@@ -23,6 +23,7 @@ from . import templates as T
 from .render import render_pdf, render_preview
 from .ui.actualizaciones import comprobar_actualizaciones
 from .ui.clientes import ClientesDialog
+from .ui.formato import FormatoDialog
 from .ui.historial import HistorialDialog
 from .ui.lote import LoteDialog
 from .ui.plantillas import PlantillaEditorDialog
@@ -51,6 +52,7 @@ class MainWindow(QMainWindow):
 
         self._docs_tocados = False  # si el usuario edito la lista manualmente
         self._editor_plantillas: PlantillaEditorDialog | None = None
+        self._editor_formato: FormatoDialog | None = None
         self._comprobacion_inicial_hecha = False
         self._construir_menu()
         self._construir_ui()
@@ -68,6 +70,7 @@ class MainWindow(QMainWindow):
         menu.addAction("Historial de avisos…", self._abrir_historial)
         menu.addSeparator()
         menu.addAction("Editar plantillas…", self._abrir_editor_plantillas)
+        menu.addAction("Formato del documento…", self._abrir_formato)
 
         ayuda = self.menuBar().addMenu("Ayuda")
         ayuda.addAction("Buscar actualizaciones…", self._buscar_actualizaciones_manual)
@@ -363,6 +366,13 @@ class MainWindow(QMainWindow):
         self._editor_plantillas.show()
         self._editor_plantillas.raise_()
         self._editor_plantillas.activateWindow()
+
+    def _abrir_formato(self) -> None:
+        if self._editor_formato is None or not self._editor_formato.isVisible():
+            self._editor_formato = FormatoDialog(self, on_cambio=self._actualizar_preview)
+        self._editor_formato.show()
+        self._editor_formato.raise_()
+        self._editor_formato.activateWindow()
 
     def _buscar_actualizaciones_manual(self) -> None:
         comprobar_actualizaciones(self, __version__, silencioso=False)

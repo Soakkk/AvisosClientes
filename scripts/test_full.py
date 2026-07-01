@@ -14,10 +14,12 @@ from PySide6.QtCore import QTimer
 app = QApplication([])
 
 from avisos import clients as C
+from avisos import estilo as EST
 from avisos import history as H
 from avisos import templates as T
 from avisos.app import MainWindow
 from avisos.ui.clientes import ClientesDialog, EditorClienteDialog
+from avisos.ui.formato import FormatoDialog
 from avisos.ui.historial import HistorialDialog
 from avisos.ui.lote import LoteDialog
 from avisos.ui.plantillas import PlantillaEditorDialog
@@ -172,6 +174,27 @@ filas_600 = _extension_vertical_texto(_render_preview_test(ctx_dpi, T.PLANTILLAS
 ratio = (filas_600 / filas_96) if filas_96 else 0
 check(f"el texto escala con el DPI real (96dpi={filas_96} filas, 600dpi={filas_600} filas, ratio={ratio:.1f}~6.25)",
       5.0 <= ratio <= 8.0)
+
+# --- formato configurable (fuente/tamano/interlineado/espacio) ---
+check("estilo por defecto es Georgia 11pt", EST.cargar() == EST.Estilo())
+est_grande = EST.Estilo(fuente="Georgia", tamano_cuerpo=14.0, interlineado=150.0, espacio_parrafo=12.0)
+EST.guardar(est_grande)
+check("estilo se guarda y recarga", EST.cargar() == est_grande)
+
+filas_chico = _extension_vertical_texto(
+    _render_preview_test(ctx_dpi, T.PLANTILLAS[0], dpi=150, est=EST.Estilo(tamano_cuerpo=9.0)))
+filas_grande = _extension_vertical_texto(
+    _render_preview_test(ctx_dpi, T.PLANTILLAS[0], dpi=150, est=EST.Estilo(tamano_cuerpo=14.0)))
+check(f"un tamano de letra mayor ocupa mas espacio vertical ({filas_chico} -> {filas_grande})",
+      filas_grande > filas_chico)
+
+est_restablecido = EST.restablecer()
+check("restablecer vuelve a los valores de fabrica", est_restablecido == EST.Estilo())
+
+dlg_formato = FormatoDialog(win)
+app.processEvents()
+check("FormatoDialog previsualiza", dlg_formato.preview.label.pixmap() is not None)
+dlg_formato.close()
 
 # --- utilidades: nombre de archivo sin colision ---
 from avisos.util import ruta_sin_colision

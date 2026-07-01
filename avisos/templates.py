@@ -506,10 +506,10 @@ def render_cuerpo_texto(ctx: Contexto, tpl: str) -> str:
             if valor.lstrip().startswith("<"):
                 bloques.append(valor)
             else:
-                bloques.append(f'<p style="margin:8pt 0;">{valor}</p>')
+                bloques.append(f'<p>{valor}</p>')
             continue
         texto = _procesar_parrafo(parrafo, valores)
-        bloques.append(f'<p style="margin:8pt 0;">{texto}</p>')
+        bloques.append(f'<p>{texto}</p>')
     return "\n".join(bloques)
 
 
