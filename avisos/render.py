@@ -25,6 +25,13 @@ MARGEN_X = 20.0
 MARGEN_SUP = 16.0
 MARGEN_INF = 16.0
 
+# QTextDocument, cuando no esta asociado a un dispositivo concreto, siempre
+# interpreta sus medidas (textWidth, tamanos de fuente) como si el destino
+# tuviera 96 DPI - da igual la resolucion real del QPrinter/QImage donde
+# se pinte despues. Si no se compensa esa diferencia, en un QPrinter a
+# alta resolucion (p. ej. 1200 DPI) el cuerpo del texto sale minusculo.
+_QTEXTDOCUMENT_DPI = 96.0
+
 _SERIF_CACHE: str | None = None
 
 
@@ -117,12 +124,21 @@ def pintar_pagina(painter: QPainter, ancho_px: float, alto_px: float,
     pie_y = alto_px - _mm(ppm, MARGEN_INF) - _mm(ppm, 13)
 
     # --- Cuerpo (QTextDocument) ---
-    doc = _doc_cuerpo(cuerpo_html, content_w, 11.0)
+    # QTextDocument razona en "unidades a 96 DPI"; hay que pintarlo con el
+    # painter escalado a esa referencia para que el tamano de letra salga
+    # correcto sea cual sea la resolucion real del dispositivo (pantalla o
+    # impresora/PDF).
+    escala_doc = res_dpi / _QTEXTDOCUMENT_DPI
+    content_w_doc = content_w / escala_doc
+    alto_disponible_doc = (alto_px - y) / escala_doc
+
+    doc = _doc_cuerpo(cuerpo_html, content_w_doc, 11.0)
     if info is not None:
-        info["desborda"] = doc.size().height() > (pie_y - y)
+        info["desborda"] = (doc.size().height() * escala_doc) > (pie_y - y)
     painter.save()
     painter.translate(x0, y)
-    doc.drawContents(painter, QRectF(0, 0, content_w, alto_px - y))
+    painter.scale(escala_doc, escala_doc)
+    doc.drawContents(painter, QRectF(0, 0, content_w_doc, alto_disponible_doc))
     painter.restore()
 
     # --- Pie de pagina (anclado abajo) ---

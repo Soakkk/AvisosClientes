@@ -148,6 +148,31 @@ check("4T vence el 30 de enero (oficial AEAT 2026)", d_general_4t == _dt.date(20
 check("domiciliacion 4T enero 2026 es el 27 (oficial AEAT: 3 dias habiles, sin fin de semana de por medio)",
       d_domicilio_4t == _dt.date(2026, 1, 27))
 
+# --- regresion critica: el tamano de letra debe escalar con el DPI real ---
+# (antes, el cuerpo del texto salia correcto en la vista previa pero
+# minusculo en el PDF real, porque QTextDocument asume 96 DPI internamente
+# y el QPrinter imprime a 1200 DPI; ver avisos/render.py _QTEXTDOCUMENT_DPI)
+from avisos.render import render_preview as _render_preview_test
+
+def _extension_vertical_texto(img):
+    w, h = img.width(), img.height()
+    filas = 0
+    for y in range(int(h * 0.24), int(h * 0.55)):
+        for x in range(0, w, 4):
+            c = img.pixelColor(x, y)
+            if c.red() < 200 or c.green() < 200 or c.blue() < 200:
+                filas += 1
+                break
+    return filas
+
+ctx_dpi = T.Contexto(periodo="1T", anio=2026, cliente="Juan Pérez",
+                     documentos=T.PLANTILLAS[0].documentos_def)
+filas_96 = _extension_vertical_texto(_render_preview_test(ctx_dpi, T.PLANTILLAS[0], dpi=96))
+filas_600 = _extension_vertical_texto(_render_preview_test(ctx_dpi, T.PLANTILLAS[0], dpi=600))
+ratio = (filas_600 / filas_96) if filas_96 else 0
+check(f"el texto escala con el DPI real (96dpi={filas_96} filas, 600dpi={filas_600} filas, ratio={ratio:.1f}~6.25)",
+      5.0 <= ratio <= 8.0)
+
 # --- utilidades: nombre de archivo sin colision ---
 from avisos.util import ruta_sin_colision
 carpeta_tmp = Path(tempfile.mkdtemp())
