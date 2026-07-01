@@ -56,7 +56,9 @@ cuenta para estos cálculos.
 
 Todo lo que define el estilo está centralizado en [`avisos/config.py`](avisos/config.py):
 colores (verde `#2E4A3C`, dorado `#B8995A`), datos del pie de página y tipografía
-(EB Garamond, incluida en `assets/fonts`, licencia OFL).
+(**Georgia**, fuente estándar de Windows; se descartó una fuente variable incrustada
+porque algunas exportan mal el grosor —todo en negrita— al generar el PDF, aunque en
+pantalla se vieran bien).
 
 Para cambiar el logo, basta con dejar un archivo cuyo nombre empiece por `EM_logo`
 en la carpeta `assets/`. Si pones un **PNG con fondo transparente** se usará ese
@@ -101,7 +103,7 @@ AvisosClientes/
 │  ├─ ui/            # diálogos: clientes, lote, historial, editor de plantillas
 │  ├─ app.py         # ventana principal (PySide6)
 │  └─ main.py        # arranque
-├─ assets/           # logo, icono y fuentes
+├─ assets/           # logo e icono
 ├─ scripts/          # smoketest.py, test_full.py (pruebas de desarrollo)
 ├─ run.py            # lanzador en desarrollo
 ├─ AvisosEMarin.spec # PyInstaller
@@ -113,5 +115,4 @@ Los datos del usuario (clientes, historial y plantillas personalizadas) se guard
 
 ## Licencia
 
-Código propio de Asesoría E. Marín. Fuente EB Garamond bajo
-[SIL Open Font License](assets/fonts/OFL.txt).
+Código propio de Asesoría E. Marín.

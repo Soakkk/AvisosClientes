@@ -10,8 +10,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QMarginsF, QRectF, Qt, QSizeF
 from PySide6.QtGui import (
-    QColor, QFont, QFontDatabase, QImage, QPageLayout, QPageSize,
-    QPainter, QTextDocument,
+    QColor, QFont, QImage, QPageLayout, QPageSize, QPainter, QTextDocument,
 )
 from PySide6.QtPrintSupport import QPrinter
 
@@ -32,28 +31,10 @@ MARGEN_INF = 16.0
 # alta resolucion (p. ej. 1200 DPI) el cuerpo del texto sale minusculo.
 _QTEXTDOCUMENT_DPI = 96.0
 
-_SERIF_CACHE: str | None = None
-
-
 def cargar_fuente() -> str:
-    """Carga una serif desde assets/fonts si existe; devuelve el nombre."""
-    global _SERIF_CACHE
-    if _SERIF_CACHE is not None:
-        return _SERIF_CACHE
-    familia = config.SERIF_FALLBACK
-    carpeta = config.asset("fonts")
-    try:
-        if carpeta.exists():
-            for ttf in sorted(carpeta.glob("*.ttf")) + sorted(carpeta.glob("*.otf")):
-                fid = QFontDatabase.addApplicationFont(str(ttf))
-                fams = QFontDatabase.applicationFontFamilies(fid)
-                if fams:
-                    familia = fams[0]
-                    break
-    except Exception:
-        pass
-    _SERIF_CACHE = familia
-    return familia
+    """Fuente estandar del sistema (Georgia): sin incrustar nada, sin
+    fuentes variables (que en algunas impresoras/PDF eligen mal el grosor)."""
+    return config.SERIF_FALLBACK
 
 
 def _mm(px_per_mm: float, mm: float) -> float:

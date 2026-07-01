@@ -28,9 +28,10 @@ COMPANY_TELEFONOS = "Tel. 968 24 93 55 · 651 91 55 02"
 COMPANY_EMAIL = "asesoriaemarin@gmail.com"
 
 # --- Tipografia ---------------------------------------------------------
-# Se intenta cargar una serif elegante desde assets/fonts (OFL). Si no
-# existe, se usa una serif del sistema. El nombre real cargado se resuelve
-# en runtime (ver render.cargar_fuente).
+# Fuente estandar del sistema (viene con Windows, no hace falta incrustar
+# nada). Se eligio una serif clasica en vez de una variable porque estas
+# ultimas pueden salir con un grosor incorrecto (en negrita) al exportar
+# a PDF, aunque en pantalla se vean bien.
 SERIF_FALLBACK = "Georgia"
 
 
