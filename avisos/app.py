@@ -9,29 +9,41 @@ from pathlib import Path
 from PySide6.QtCore import QDate, QStringListModel, Qt, QTimer
 from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QCompleter, QDateEdit, QFileDialog, QFormLayout,
-    QFrame, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMainWindow,
-    QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QSpinBox,
+    QCheckBox, QComboBox, QCompleter, QDateEdit, QFormLayout, QFrame,
+    QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QMessageBox,
+    QPlainTextEdit, QPushButton, QScrollArea, QSpinBox, QSplitter,
     QVBoxLayout, QWidget,
 )
 
+from . import __version__
 from . import clients as C
 from . import config
 from . import history as H
 from . import templates as T
 from .render import render_pdf, render_preview
+from .ui.actualizaciones import comprobar_actualizaciones
 from .ui.clientes import ClientesDialog
 from .ui.historial import HistorialDialog
 from .ui.lote import LoteDialog
 from .ui.plantillas import PlantillaEditorDialog
 from .ui.preview_widget import PreviewPanel
-from .util import nombre_archivo
+from .util import nombre_archivo, ruta_sin_colision
+
+
+def _ajustar_desplegable(combo: QComboBox) -> None:
+    """Evita que el desplegable corte el texto largo: ensancha el popup
+    (no el propio combo cerrado) y anade tooltip con el texto completo."""
+    fm = combo.fontMetrics()
+    ancho = max((fm.horizontalAdvance(combo.itemText(i)) for i in range(combo.count())), default=0)
+    combo.view().setMinimumWidth(ancho + 40)
+    for i in range(combo.count()):
+        combo.setItemData(i, combo.itemText(i), Qt.ToolTipRole)
 
 
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle(config.APP_NAME)
+        self.setWindowTitle(f"{config.APP_NAME} — v{__version__}")
         self.resize(1360, 880)
         icon = config.asset("EM_logo_horizontal_claro.jpg")
         if icon.exists():
@@ -39,8 +51,10 @@ class MainWindow(QMainWindow):
 
         self._docs_tocados = False  # si el usuario edito la lista manualmente
         self._editor_plantillas: PlantillaEditorDialog | None = None
+        self._comprobacion_inicial_hecha = False
         self._construir_menu()
         self._construir_ui()
+        self._aplicar_periodo_sugerido()
         self._cargar_ajustes()
         self._refrescar_completer_clientes()
         self._on_plantilla_cambia(forzar_docs=not self._docs_tocados)
@@ -55,16 +69,21 @@ class MainWindow(QMainWindow):
         menu.addSeparator()
         menu.addAction("Editar plantillas…", self._abrir_editor_plantillas)
 
+        ayuda = self.menuBar().addMenu("Ayuda")
+        ayuda.addAction("Buscar actualizaciones…", self._buscar_actualizaciones_manual)
+
     def _construir_ui(self) -> None:
         central = QWidget()
         self.setCentralWidget(central)
-        raiz = QHBoxLayout(central)
+        raiz = QVBoxLayout(central)
         raiz.setContentsMargins(14, 14, 14, 14)
-        raiz.setSpacing(14)
+
+        splitter = QSplitter(Qt.Horizontal)
+        raiz.addWidget(splitter)
 
         # ---- Panel izquierdo: formulario ----
         panel = QWidget()
-        panel.setMaximumWidth(440)
+        panel.setMinimumWidth(320)
         form_scroll = QScrollArea()
         form_scroll.setWidgetResizable(True)
         form_scroll.setWidget(panel)
@@ -85,6 +104,7 @@ class MainWindow(QMainWindow):
         self.cmb_plantilla = QComboBox()
         for p in T.PLANTILLAS:
             self.cmb_plantilla.addItem(f"{p.grupo} · {p.nombre}", p.id)
+        _ajustar_desplegable(self.cmb_plantilla)
         self.cmb_plantilla.currentIndexChanged.connect(
             lambda: self._on_plantilla_cambia(forzar_docs=not self._docs_tocados))
         ly_pl.addWidget(self.cmb_plantilla)
@@ -98,6 +118,7 @@ class MainWindow(QMainWindow):
         self.cmb_periodo = QComboBox()
         for clave, info in T.PERIODOS.items():
             self.cmb_periodo.addItem(info["largo"], clave)
+        _ajustar_desplegable(self.cmb_periodo)
         self.cmb_periodo.currentIndexChanged.connect(self._on_periodo_cambia)
         ly_d.addRow("Periodo:", self.cmb_periodo)
 
@@ -120,6 +141,7 @@ class MainWindow(QMainWindow):
 
         self.lbl_aviso_fecha = QLabel("")
         self.lbl_aviso_fecha.setStyleSheet("color:#B3541E; font-size:11px;")
+        self.lbl_aviso_fecha.setWordWrap(True)
         ly_d.addRow("", self.lbl_aviso_fecha)
 
         self.chk_navidad = QCheckBox("Incluir felicitación navideña")
@@ -151,17 +173,19 @@ class MainWindow(QMainWindow):
 
         # Botones
         fila = QHBoxLayout()
-        self.btn_pdf = QPushButton("Generar y guardar PDF…")
+        self.btn_pdf = QPushButton("Generar y guardar PDF en el Escritorio")
         self.btn_pdf.setMinimumHeight(40)
         self.btn_pdf.clicked.connect(self._guardar_pdf)
         fila.addWidget(self.btn_pdf)
         col.addLayout(fila)
         col.addStretch(1)
 
-        raiz.addWidget(form_scroll)
+        splitter.addWidget(form_scroll)
 
         # ---- Panel derecho: vista previa ----
-        der = QVBoxLayout()
+        der_widget = QWidget()
+        der = QVBoxLayout(der_widget)
+        der.setContentsMargins(0, 0, 0, 0)
         lbl = QLabel("Vista previa")
         lbl.setFont(f)
         der.addWidget(lbl)
@@ -176,7 +200,11 @@ class MainWindow(QMainWindow):
 
         self.preview = PreviewPanel()
         der.addWidget(self.preview, 1)
-        raiz.addLayout(der, 1)
+        splitter.addWidget(der_widget)
+
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+        splitter.setSizes([440, 900])
 
         # Timer para no regenerar en cada tecla
         self._timer = QTimer(self)
@@ -187,6 +215,9 @@ class MainWindow(QMainWindow):
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
         QTimer.singleShot(0, self._actualizar_preview)
+        if not self._comprobacion_inicial_hecha:
+            self._comprobacion_inicial_hecha = True
+            QTimer.singleShot(3000, lambda: comprobar_actualizaciones(self, __version__, silencioso=True))
 
     # --------------------------------------------------------------- estado
     def _plantilla_actual(self) -> T.Plantilla:
@@ -203,6 +234,11 @@ class MainWindow(QMainWindow):
             navidad=self.chk_navidad.isChecked(),
             notas=self.txt_notas.toPlainText(),
         )
+
+    def _aplicar_periodo_sugerido(self) -> None:
+        clave, anio = T.periodo_sugerido_hoy()
+        self._set_periodo(clave)
+        self.spin_anio.setValue(anio)
 
     def _on_plantilla_cambia(self, forzar_docs: bool = True) -> None:
         p = self._plantilla_actual()
@@ -279,23 +315,22 @@ class MainWindow(QMainWindow):
     def _guardar_pdf(self) -> None:
         ctx = self._contexto()
         plantilla = self._plantilla_actual()
-        carpeta = self._ultima_carpeta()
-        destino, _ = QFileDialog.getSaveFileName(
-            self, "Guardar aviso en PDF",
-            str(Path(carpeta) / nombre_archivo(plantilla, ctx)),
-            "PDF (*.pdf)")
-        if not destino:
-            return
+        escritorio = Path.home() / "Desktop"
+        escritorio.mkdir(parents=True, exist_ok=True)
+        destino = ruta_sin_colision(escritorio, nombre_archivo(plantilla, ctx))
+
         info: dict = {}
         try:
             render_pdf(ctx, plantilla, destino, info=info)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"No se pudo generar el PDF:\n{e}")
             return
-        self._guardar_ajustes(Path(destino).parent)
-        H.registrar(plantilla.nombre, ctx.periodo_corto, ctx.anio, ctx.cliente, destino)
 
-        mensaje = f"Aviso guardado en:\n{destino}"
+        H.registrar(plantilla.nombre, ctx.periodo_corto, ctx.anio, ctx.cliente, str(destino))
+        if C.asegurar_cliente(ctx.cliente):
+            self._refrescar_completer_clientes()
+
+        mensaje = f"Aviso guardado en el Escritorio:\n{destino.name}"
         if info.get("desborda"):
             mensaje += "\n\n⚠ Aviso: el texto no cabía en una sola página; revisa el PDF."
         resp = QMessageBox.question(
@@ -303,7 +338,7 @@ class MainWindow(QMainWindow):
             QMessageBox.Yes | QMessageBox.No)
         if resp == QMessageBox.Yes:
             try:
-                os.startfile(destino)  # type: ignore[attr-defined]
+                os.startfile(str(destino))  # type: ignore[attr-defined]
             except Exception:
                 pass
 
@@ -313,7 +348,10 @@ class MainWindow(QMainWindow):
         self._refrescar_completer_clientes()
 
     def _abrir_lote(self) -> None:
-        LoteDialog(self, self._contexto(), self._plantilla_actual(), self._ultima_carpeta()).exec()
+        dlg = LoteDialog(self, self._contexto(), self._plantilla_actual(), self._ultima_carpeta())
+        dlg.exec()
+        self._guardar_ajustes(Path(dlg.carpeta_usada()))
+        self._refrescar_completer_clientes()
 
     def _abrir_historial(self) -> None:
         HistorialDialog(self).exec()
@@ -325,6 +363,9 @@ class MainWindow(QMainWindow):
         self._editor_plantillas.show()
         self._editor_plantillas.raise_()
         self._editor_plantillas.activateWindow()
+
+    def _buscar_actualizaciones_manual(self) -> None:
+        comprobar_actualizaciones(self, __version__, silencioso=False)
 
     # ------------------------------------------------------------- ajustes
     def _ultima_carpeta(self) -> str:

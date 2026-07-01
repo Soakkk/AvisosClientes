@@ -60,3 +60,18 @@ def buscar(clientes: list[Cliente], nombre: str) -> Cliente | None:
         if c.nombre.strip().lower() == clave:
             return c
     return None
+
+
+def asegurar_cliente(nombre: str) -> bool:
+    """Si `nombre` no esta ya en la base de datos, lo anade (solo el
+    nombre; el resto de campos se pueden completar luego desde «Clientes»).
+    Devuelve True si se ha anadido un cliente nuevo."""
+    nombre = nombre.strip()
+    if not nombre:
+        return False
+    clientes = cargar()
+    if buscar(clientes, nombre):
+        return False
+    clientes.append(Cliente(nombre=nombre))
+    guardar(clientes)
+    return True

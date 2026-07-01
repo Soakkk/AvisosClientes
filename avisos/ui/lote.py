@@ -17,7 +17,7 @@ from .. import clients as C
 from .. import history as H
 from ..render import render_pdf
 from ..templates import Contexto, Plantilla
-from ..util import nombre_archivo
+from ..util import nombre_archivo, ruta_sin_colision
 
 
 class LoteDialog(QDialog):
@@ -84,6 +84,9 @@ class LoteDialog(QDialog):
         layout.addLayout(fila_botones)
 
     # ------------------------------------------------------------------
+    def carpeta_usada(self) -> str:
+        return self._carpeta
+
     def _marcar_todos(self, estado) -> None:
         for i in range(self.lista.count()):
             self.lista.item(i).setCheckState(estado)
@@ -115,10 +118,11 @@ class LoteDialog(QDialog):
         errores: list[str] = []
         for nombre in nombres:
             ctx = replace(self._ctx_base, cliente=nombre)
-            ruta = carpeta / nombre_archivo(self._plantilla, ctx)
+            ruta = ruta_sin_colision(carpeta, nombre_archivo(self._plantilla, ctx))
             try:
                 render_pdf(ctx, self._plantilla, ruta)
                 H.registrar(self._plantilla.nombre, ctx.periodo_corto, ctx.anio, nombre, str(ruta))
+                C.asegurar_cliente(nombre)
                 generados += 1
             except Exception as e:
                 errores.append(f"{nombre}: {e}")

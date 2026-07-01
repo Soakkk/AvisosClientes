@@ -17,18 +17,35 @@ periodo, año, fecha límite, nombre del cliente y la lista de documentos.
   - **Recordatorio de plazos — Cierre de trimestre**
   - **4.º Trimestre + Resumen Anual (cierre de ejercicio)** (con felicitación navideña opcional)
   - **Renta — Bienes arrendados**
-- Periodo y **fecha límite** que se rellenan solos (1T→abril, 2T→julio, 3T→octubre, 4T→enero),
-  con aviso si la fecha cae en fin de semana o festivo nacional fijo.
+- Periodo y **año se sugieren solos** según la fecha del sistema, y la **fecha límite**
+  se calcula con la regla real de la AEAT: día 20 (o siguiente día hábil si cae en fin de
+  semana o festivo nacional/Viernes Santo), y la fecha de **domiciliación** (ese día menos
+  5 naturales), que es la que se usa por defecto en los avisos.
 - Lista de documentos editable y notas adicionales.
-- **Vista previa en vivo** idéntica al PDF final, ajustada al ancho de la ventana, con aviso
-  si el texto no cabe en una sola página.
+- **Vista previa en vivo** idéntica al PDF final, ajustada al ancho de la ventana (con
+  separador arrastrable respecto al formulario), con aviso si el texto no cabe en una
+  sola página o si la fecha límite cae en fin de semana/festivo.
 - Cabecera con el logo, colores de marca y pie de página fijo en todos los avisos.
 - **Base de datos de clientes** (nombre, NIF, teléfono, email) con autocompletado en el
-  campo «Cliente» y relleno automático del NIF en el aviso.
+  campo «Cliente» y relleno automático del NIF en el aviso. Los clientes nuevos se
+  añaden solos al generar un aviso a su nombre.
 - **Generar para varios clientes**: el mismo aviso (misma plantilla y mismos datos),
   una copia en PDF individual por cada cliente elegido.
 - **Historial** de avisos generados, con búsqueda por cliente y acceso directo al PDF.
 - **Editor de plantillas** para cambiar los textos desde la propia aplicación, sin tocar código.
+- **Generar y guardar PDF** guarda automáticamente en el Escritorio con el nombre del
+  cliente y el tipo de aviso (sin diálogo de guardado).
+- **Comprobación de actualizaciones** contra los releases de GitHub (automática al abrir,
+  o desde Ayuda → Buscar actualizaciones): descarga e instala la versión nueva con un clic.
+
+## Cálculo de plazos (AEAT)
+
+En `avisos/templates.py` (`fecha_general_periodo`, `fecha_domiciliacion_periodo`) se calcula
+la fecha límite del día 20 de cada trimestre, retrasándola al siguiente día hábil si cae en
+sábado, domingo, festivo nacional fijo o Viernes Santo (calculado por fórmula, no festivos
+autonómicos/locales). La fecha de domiciliación es esa fecha ajustada menos 5 días naturales,
+sin volver a reajustar. **Importante:** solo cubre festivos nacionales — conviene revisar el
+calendario oficial de la AEAT en fechas señaladas o con festivos locales de Murcia.
 
 ## Estética / manual de estilo
 

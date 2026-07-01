@@ -23,7 +23,7 @@ import html
 import json
 import re
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 from . import config
@@ -48,12 +48,6 @@ PERIODOS = {
 }
 
 
-def plazo_por_defecto(clave: str, anio: int) -> date:
-    info = PERIODOS[clave]
-    mes, dia = info["plazo"]
-    return date(anio + info["anio_offset"], mes, dia)
-
-
 def fecha_larga(d: date) -> str:
     return f"{d.day} de {MESES[d.month - 1]} de {d.year}"
 
@@ -65,14 +59,100 @@ FESTIVOS_FIJOS = {
 }
 
 
+def _viernes_santo(anio: int) -> date:
+    """Domingo de Pascua (algoritmo de Gauss/Meeus) menos dos dias."""
+    a = anio % 19
+    b = anio // 100
+    c = anio % 100
+    d = b // 4
+    e = b % 4
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i = c // 4
+    k = c % 4
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l) // 451
+    mes = (h + l - 7 * m + 114) // 31
+    dia = ((h + l - 7 * m + 114) % 31) + 1
+    domingo_pascua = date(anio, mes, dia)
+    return domingo_pascua - timedelta(days=2)
+
+
+def es_festivo(d: date) -> bool:
+    """Festivos nacionales fijos + Viernes Santo.
+
+    Nota: no incluye festivos autonomicos/locales (p. ej. de Murcia), solo
+    los nacionales. Para fechas cercanas a un festivo regional, conviene
+    revisar el calendario oficial de la AEAT.
+    """
+    if (d.month, d.day) in FESTIVOS_FIJOS:
+        return True
+    return d == _viernes_santo(d.year)
+
+
 def aviso_fecha(d: date) -> str:
-    """Devuelve un aviso breve si la fecha cae en fin de semana o festivo fijo, si no ''."""
+    """Devuelve un aviso breve si la fecha cae en fin de semana o festivo, si no ''."""
     festivo = FESTIVOS_FIJOS.get((d.month, d.day))
     if festivo:
         return f"Cae en festivo ({festivo})."
+    if d == _viernes_santo(d.year):
+        return "Cae en festivo (Viernes Santo)."
     if d.weekday() >= 5:  # 5=sabado, 6=domingo
         return "Cae en fin de semana."
     return ""
+
+
+def _siguiente_dia_habil(d: date) -> date:
+    while d.weekday() >= 5 or es_festivo(d):
+        d += timedelta(days=1)
+    return d
+
+
+def fecha_general_periodo(clave: str, anio: int) -> date:
+    """Fecha limite general de presentacion (dia 20, o el habil siguiente
+    si cae en sabado, domingo o festivo)."""
+    info = PERIODOS[clave]
+    mes, dia = info["plazo"]
+    base = date(anio + info["anio_offset"], mes, dia)
+    if clave == "RENTA":
+        return _siguiente_dia_habil(base)
+    return _siguiente_dia_habil(base)
+
+
+def fecha_domiciliacion_periodo(clave: str, anio: int) -> date:
+    """Fecha limite para domiciliar el pago: la fecha general menos 5 dias
+    naturales (regla de la AEAT). No se vuelve a ajustar por festivos."""
+    if clave == "RENTA":
+        return fecha_general_periodo(clave, anio)
+    return fecha_general_periodo(clave, anio) - timedelta(days=5)
+
+
+def plazo_por_defecto(clave: str, anio: int) -> date:
+    """Fecha que se usa por defecto en los avisos: la de domiciliacion,
+    porque la practica totalidad de los clientes domicilia el pago."""
+    return fecha_domiciliacion_periodo(clave, anio)
+
+
+def periodo_sugerido_hoy(hoy: date | None = None) -> tuple[str, int]:
+    """Periodo y año mas probable segun la fecha actual del sistema.
+
+    Los avisos de un trimestre se preparan y envian entre el mes
+    siguiente al cierre del trimestre y su mes de presentacion, asi que
+    se agrupan los meses del año alrededor de esas fechas de presentacion
+    (abril->1T, julio->2T, octubre->3T, enero->4T).
+    """
+    hoy = hoy or date.today()
+    mes = hoy.month
+    if mes in (11, 12):
+        return "4T", hoy.year
+    if mes == 1:
+        return "4T", hoy.year - 1
+    if mes in (2, 3, 4):
+        return "1T", hoy.year
+    if mes in (5, 6, 7):
+        return "2T", hoy.year
+    return "3T", hoy.year
 
 
 # --- Contexto que reciben las plantillas --------------------------------
@@ -320,7 +400,8 @@ def _notas_html(notas: str) -> str:
 
 
 def _tabla_plazos_html(ctx: Contexto) -> str:
-    fecha = html.escape(ctx.fecha_limite_txt, quote=False)
+    fecha_domiciliacion = html.escape(ctx.fecha_limite_txt, quote=False)
+    fecha_general = html.escape(fecha_larga(fecha_general_periodo(ctx.periodo, ctx.anio)), quote=False)
     borde = "#C9C2AC"
     return f"""<table width="100%" cellpadding="5" cellspacing="0"
        style="border-collapse:collapse; margin:6pt 0;">
@@ -330,11 +411,11 @@ def _tabla_plazos_html(ctx: Contexto) -> str:
   </tr>
   <tr>
     <td style="border:1px solid {borde};">Resultado positivo con domiciliación</td>
-    <td style="border:1px solid {borde};">Hasta el 15 del mes de presentación</td>
+    <td style="border:1px solid {borde};">Hasta el {fecha_domiciliacion}</td>
   </tr>
   <tr>
     <td style="border:1px solid {borde};">Resto de resultados (negativo, a compensar, aplazamiento)</td>
-    <td style="border:1px solid {borde};">Hasta el {fecha}</td>
+    <td style="border:1px solid {borde};">Hasta el {fecha_general}</td>
   </tr>
 </table>"""
 

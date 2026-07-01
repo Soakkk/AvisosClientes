@@ -111,6 +111,53 @@ for nombre in nombres:
         generados += 1
 check("lote genera un PDF por cliente", generados == 2)
 
+# --- version en el titulo ---
+from avisos import __version__ as _version
+check("titulo incluye la version", f"v{_version}" in win.windowTitle())
+
+# --- periodo/anio sugerido segun fecha del sistema ---
+clave_esperada, anio_esperado = T.periodo_sugerido_hoy()
+check("combo periodo aplica el sugerido al abrir",
+      win.cmb_periodo.currentData() == clave_esperada or win._plantilla_actual().id == "cierre_anual")
+
+# --- desplegables no cortan texto (popup mas ancho que el texto mas largo) ---
+ancho_max_texto = max(win.cmb_plantilla.fontMetrics().horizontalAdvance(win.cmb_plantilla.itemText(i))
+                      for i in range(win.cmb_plantilla.count()))
+check("popup del combo de plantillas es mas ancho que el texto",
+      win.cmb_plantilla.view().minimumWidth() >= ancho_max_texto)
+
+# --- splitter presente (separador arrastrable) ---
+from PySide6.QtWidgets import QSplitter
+splitters = win.centralWidget().findChildren(QSplitter)
+check("hay un QSplitter en la ventana principal", len(splitters) == 1)
+
+# --- calculo de plazos AEAT ---
+d_general = T.fecha_general_periodo("1T", 2026)
+d_domicilio = T.fecha_domiciliacion_periodo("1T", 2026)
+check("domiciliacion es 5 dias antes que la fecha general",
+      (d_general - d_domicilio).days == 5)
+check("fecha general nunca cae en sabado/domingo/festivo",
+      d_general.weekday() < 5 and not T.es_festivo(d_general))
+check("plazo_por_defecto usa la domiciliacion", T.plazo_por_defecto("1T", 2026) == d_domicilio)
+
+# --- utilidades: nombre de archivo sin colision ---
+from avisos.util import ruta_sin_colision
+carpeta_tmp = Path(tempfile.mkdtemp())
+(carpeta_tmp / "prueba.pdf").write_text("x")
+ruta_libre = ruta_sin_colision(carpeta_tmp, "prueba.pdf")
+check("ruta_sin_colision evita sobrescribir", ruta_libre.name == "prueba (2).pdf")
+
+# --- auto-registro de clientes ---
+check("asegurar_cliente anade un cliente nuevo", C.asegurar_cliente("Cliente Nuevo De Prueba") is True)
+check("asegurar_cliente no duplica uno existente", C.asegurar_cliente("Cliente Nuevo De Prueba") is False)
+
+# --- updater: logica pura sin red ---
+from avisos import updater as U
+check("version_tupla compara correctamente", U._version_tupla("v1.2.0") > U._version_tupla("v1.1.0"))
+remota_falsa = U.VersionRemota(tag="v1.2.0", version=(1, 2, 0), url_instalador="http://x", notas="")
+check("hay_actualizacion detecta version mas nueva", U.hay_actualizacion("1.1.0", remota_falsa) is True)
+check("hay_actualizacion no marca la misma version", U.hay_actualizacion("1.2.0", remota_falsa) is False)
+
 if errores:
     print(f"\n{len(errores)} FALLO(S): {errores}")
     sys.exit(1)
