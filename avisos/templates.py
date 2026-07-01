@@ -1,21 +1,39 @@
-"""Plantillas de avisos y utilidades de periodo.
+"""Plantillas de avisos, motor de sustitucion y overrides editables.
 
-Cada plantilla define un titulo y un cuerpo en HTML a partir de un
-contexto (periodo, anio, cliente, fecha limite, documentos, etc.).
-La redaccion procede de los avisos reales de la oficina.
+Cada plantilla tiene un texto de titulo y un texto de cuerpo (plano, con
+parrafos separados por una linea en blanco) que puede contener:
+
+- Placeholders entre llaves: {cliente} {periodo} {anio} {fecha_limite}
+  {nif} {documentos} {notas} {felicitacion_navidad} {tabla_plazos}
+- Negrita al estilo WhatsApp: *texto en negrita*
+
+Los placeholders {documentos}, {notas}, {tabla_plazos} y
+{felicitacion_navidad} deben ir solos en su propio parrafo: si su valor
+queda vacio (p. ej. no hay notas, o no se marco la felicitacion), el
+parrafo entero desaparece del aviso.
+
+El texto "de fabrica" de cada plantilla vive en este fichero. El usuario
+puede sobrescribirlo desde el editor de plantillas de la aplicacion; esas
+sobrescrituras se guardan en un JSON en la carpeta de configuracion y
+tienen prioridad sobre el texto de fabrica.
 """
 from __future__ import annotations
 
+import html
+import json
+import re
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Callable
+from pathlib import Path
+
+from . import config
 
 MESES = [
     "enero", "febrero", "marzo", "abril", "mayo", "junio",
     "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
 ]
 
-# Periodos disponibles: clave -> (etiqueta larga, corta, meses[0-based], mes/dia plazo, offset anio plazo)
+# Periodos disponibles: clave -> etiqueta larga, meses[0-based] y plazo por defecto
 PERIODOS = {
     "1T": {"largo": "1.er Trimestre", "corto": "1T", "meses": [0, 1, 2],
            "plazo": (4, 20), "anio_offset": 0},
@@ -30,22 +48,6 @@ PERIODOS = {
 }
 
 
-def meses_texto(clave: str) -> str:
-    info = PERIODOS[clave]
-    ms = info["meses"]
-    if len(ms) == 12:
-        return "el ejercicio completo"
-    return f"{MESES[ms[0]]}, {MESES[ms[1]]} y {MESES[ms[2]]}"
-
-
-def meses_rango(clave: str) -> str:
-    info = PERIODOS[clave]
-    ms = info["meses"]
-    if len(ms) == 12:
-        return "enero–diciembre"
-    return f"{MESES[ms[0]]}–{MESES[ms[2]]}"
-
-
 def plazo_por_defecto(clave: str, anio: int) -> date:
     info = PERIODOS[clave]
     mes, dia = info["plazo"]
@@ -56,12 +58,30 @@ def fecha_larga(d: date) -> str:
     return f"{d.day} de {MESES[d.month - 1]} de {d.year}"
 
 
+FESTIVOS_FIJOS = {
+    (1, 1): "Año Nuevo", (1, 6): "Reyes", (5, 1): "Día del Trabajo",
+    (8, 15): "Asunción", (10, 12): "Fiesta Nacional", (11, 1): "Todos los Santos",
+    (12, 6): "Día de la Constitución", (12, 8): "Inmaculada", (12, 25): "Navidad",
+}
+
+
+def aviso_fecha(d: date) -> str:
+    """Devuelve un aviso breve si la fecha cae en fin de semana o festivo fijo, si no ''."""
+    festivo = FESTIVOS_FIJOS.get((d.month, d.day))
+    if festivo:
+        return f"Cae en festivo ({festivo})."
+    if d.weekday() >= 5:  # 5=sabado, 6=domingo
+        return "Cae en fin de semana."
+    return ""
+
+
 # --- Contexto que reciben las plantillas --------------------------------
 @dataclass
 class Contexto:
-    periodo: str = "1T"            # clave de PERIODOS
+    periodo: str = "1T"
     anio: int = date.today().year
-    cliente: str = ""              # vacio -> "Estimado/a cliente"
+    cliente: str = ""              # vacio -> se usa la palabra "cliente"
+    nif: str = ""
     fecha_limite: date | None = None
     documentos: list[str] = field(default_factory=list)
     navidad: bool = False
@@ -76,29 +96,9 @@ class Contexto:
         return PERIODOS[self.periodo]["corto"]
 
     @property
-    def saludo(self) -> str:
-        nombre = self.cliente.strip()
-        return f"Estimado/a {nombre}:" if nombre else "Estimado/a cliente:"
-
-    @property
     def fecha_limite_txt(self) -> str:
         d = self.fecha_limite or plazo_por_defecto(self.periodo, self.anio)
         return fecha_larga(d)
-
-
-def _lista_html(items: list[str]) -> str:
-    lis = "".join(f"<li>{x.strip()}</li>" for x in items if x.strip())
-    return f'<ul style="margin:6pt 0 6pt 0;">{lis}</ul>' if lis else ""
-
-
-def _notas_html(ctx: Contexto) -> str:
-    if not ctx.notas.strip():
-        return ""
-    parrafos = "".join(
-        f"<p style='margin:6pt 0;'>{ln.strip()}</p>"
-        for ln in ctx.notas.strip().splitlines() if ln.strip()
-    )
-    return parrafos
 
 
 @dataclass
@@ -108,115 +108,14 @@ class Plantilla:
     nombre: str
     documentos_def: list[str]
     usa_navidad: bool
-    titulo: Callable[[Contexto], str]
-    cuerpo: Callable[[Contexto], str]
+    titulo_tpl: str
+    cuerpo_tpl: str
 
 
-# ======================================================================
-#  PLANTILLAS
-# ======================================================================
-
-def _t_solicitud_trim(ctx: Contexto) -> str:
-    return f"Solicitud de documentación — {ctx.periodo_largo} de {ctx.anio}"
-
-
-def _c_solicitud_trim(ctx: Contexto) -> str:
-    return f"""
-<p>{ctx.saludo}</p>
-<p style="margin:8pt 0;">Con motivo de la presentación de los impuestos correspondientes
-al <b>{ctx.periodo_largo.lower()} de {ctx.anio}</b>, le rogamos que nos remita la documentación
-necesaria para poder preparar y presentar sus obligaciones fiscales dentro del plazo establecido.</p>
-<p style="margin:8pt 0 2pt 0;">En concreto, necesitamos la siguiente documentación:</p>
-{_lista_html(ctx.documentos)}
-<p style="margin:8pt 0;">Le agradeceríamos que nos hiciera llegar toda la documentación
-<b>antes del {ctx.fecha_limite_txt}</b>, con el fin de poder revisarla con tiempo suficiente
-y presentar los impuestos dentro de plazo.</p>
-{_notas_html(ctx)}
-<p style="margin:8pt 0;">Agradecemos de antemano su colaboración y quedamos a su disposición
-para cualquier consulta o aclaración.</p>
-<p style="margin:14pt 0 0 0;">Reciba un cordial saludo.</p>
-"""
-
-
-def _t_recordatorio(ctx: Contexto) -> str:
-    return f"Recordatorio de plazos — Cierre del {ctx.periodo_largo} de {ctx.anio}"
-
-
-def _c_recordatorio(ctx: Contexto) -> str:
-    return f"""
-<p>{ctx.saludo}</p>
-<p style="margin:8pt 0;">Le recordamos que el plazo de presentación de las liquidaciones
-correspondientes al <b>{ctx.periodo_largo} de {ctx.anio}</b> es el siguiente:</p>
-<table width="100%" cellpadding="5" cellspacing="0"
-       style="border-collapse:collapse; margin:6pt 0;">
-  <tr>
-    <td style="border:1px solid {'#C9C2AC'}; background:#F3F0E6;"><b>Modalidad de presentación</b></td>
-    <td style="border:1px solid {'#C9C2AC'}; background:#F3F0E6;"><b>Plazo límite</b></td>
-  </tr>
-  <tr>
-    <td style="border:1px solid {'#C9C2AC'};">Resultado positivo con domiciliación</td>
-    <td style="border:1px solid {'#C9C2AC'};">Hasta el 15 del mes de presentación</td>
-  </tr>
-  <tr>
-    <td style="border:1px solid {'#C9C2AC'};">Resto de resultados (negativo, a compensar, aplazamiento)</td>
-    <td style="border:1px solid {'#C9C2AC'};">Hasta el {ctx.fecha_limite_txt}</td>
-  </tr>
-</table>
-<p style="margin:8pt 0 2pt 0;">Para poder confeccionar y presentar las liquidaciones en plazo,
-le pedimos que nos haga llegar, cuanto antes, la documentación que se detalla a continuación:</p>
-{_lista_html(ctx.documentos)}
-{_notas_html(ctx)}
-<p style="margin:8pt 0;">Sin otro particular, quedamos a su entera disposición para cualquier
-consulta o aclaración que pudiera precisar.</p>
-<p style="margin:14pt 0 0 0;">Reciba un cordial saludo.</p>
-"""
-
-
-def _t_cierre_anual(ctx: Contexto) -> str:
-    return f"Solicitud de documentación — 4.º Trimestre y Resumen Anual {ctx.anio}"
-
-
-def _c_cierre_anual(ctx: Contexto) -> str:
-    navidad = (
-        '<p style="margin:8pt 0;">Desde <b>Asesoría E. Marín</b> le deseamos una Feliz Navidad '
-        'y un próspero año nuevo lleno de alegría, salud y felicidad.</p>'
-        if ctx.navidad else ""
-    )
-    return f"""
-<p>{ctx.saludo}</p>
-{navidad}
-<p style="margin:8pt 0;">Con motivo del cierre del ejercicio <b>{ctx.anio}</b>, le informamos de sus
-próximas obligaciones fiscales. Para poder revisar su documentación y presentar sus impuestos
-dentro de los plazos legales, necesitamos que nos remita la siguiente información:</p>
-{_lista_html(ctx.documentos)}
-<p style="margin:8pt 0;">Le agradeceríamos que nos remitiera la documentación
-<b>antes del {ctx.fecha_limite_txt}</b>, con el fin de garantizar la presentación en plazo
-de sus impuestos.</p>
-{_notas_html(ctx)}
-<p style="margin:8pt 0;">Quedamos a su disposición para cualquier duda o aclaración.</p>
-<p style="margin:14pt 0 0 0;">Reciba un cordial saludo.</p>
-"""
-
-
-def _t_renta_arrend(ctx: Contexto) -> str:
-    return f"Solicitud de información — Bienes arrendados · Renta {ctx.anio}"
-
-
-def _c_renta_arrend(ctx: Contexto) -> str:
-    return f"""
-<p>{ctx.saludo}</p>
-<p style="margin:8pt 0;">Con motivo de la preparación de su declaración de la Renta del ejercicio
-<b>{ctx.anio}</b>, necesitamos que nos facilite la información relativa a los bienes que haya
-tenido arrendados durante el año.</p>
-<p style="margin:8pt 0 2pt 0;">De cada bien arrendado necesitamos lo siguiente:</p>
-{_lista_html(ctx.documentos)}
-<p style="margin:8pt 0;">Le rogamos que nos lo haga llegar <b>antes del {ctx.fecha_limite_txt}</b>
-para poder preparar su declaración con tiempo suficiente.</p>
-{_notas_html(ctx)}
-<p style="margin:8pt 0;">Agradecemos de antemano su colaboración y quedamos a su disposición.</p>
-<p style="margin:14pt 0 0 0;">Reciba un cordial saludo.</p>
-"""
-
+TEXTO_NAVIDAD_DEF = (
+    "Desde Asesoría E. Marín le deseamos una Feliz Navidad y un próspero "
+    "año nuevo lleno de alegría, salud y felicidad."
+)
 
 DOCS_TRIMESTRE = [
     "Facturas de ingresos y gastos, emitidas y recibidas, correspondientes al trimestre.",
@@ -251,8 +150,22 @@ PLANTILLAS: list[Plantilla] = [
         nombre="Solicitud de documentación — Trimestre",
         documentos_def=DOCS_TRIMESTRE,
         usa_navidad=False,
-        titulo=_t_solicitud_trim,
-        cuerpo=_c_solicitud_trim,
+        titulo_tpl="Solicitud de documentación — {periodo} de {anio}",
+        cuerpo_tpl="""Estimado/a {cliente}:
+
+Con motivo de la presentación de los impuestos correspondientes al *{periodo} de {anio}*, le rogamos que nos remita la documentación necesaria para poder preparar y presentar sus obligaciones fiscales dentro del plazo establecido.
+
+En concreto, necesitamos la siguiente documentación:
+
+{documentos}
+
+Le agradeceríamos que nos hiciera llegar toda la documentación *antes del {fecha_limite}*, con el fin de poder revisarla con tiempo suficiente y presentar los impuestos dentro de plazo.
+
+{notas}
+
+Agradecemos de antemano su colaboración y quedamos a su disposición para cualquier consulta o aclaración.
+
+Reciba un cordial saludo.""",
     ),
     Plantilla(
         id="recordatorio",
@@ -260,8 +173,22 @@ PLANTILLAS: list[Plantilla] = [
         nombre="Recordatorio de plazos — Cierre de trimestre",
         documentos_def=DOCS_RECORD,
         usa_navidad=False,
-        titulo=_t_recordatorio,
-        cuerpo=_c_recordatorio,
+        titulo_tpl="Recordatorio de plazos — Cierre del {periodo} de {anio}",
+        cuerpo_tpl="""Estimado/a {cliente}:
+
+Le recordamos que el plazo de presentación de las liquidaciones correspondientes al *{periodo} de {anio}* es el siguiente:
+
+{tabla_plazos}
+
+Para poder confeccionar y presentar las liquidaciones en plazo, le pedimos que nos haga llegar, cuanto antes, la documentación que se detalla a continuación:
+
+{documentos}
+
+{notas}
+
+Sin otro particular, quedamos a su entera disposición para cualquier consulta o aclaración que pudiera precisar.
+
+Reciba un cordial saludo.""",
     ),
     Plantilla(
         id="cierre_anual",
@@ -269,8 +196,22 @@ PLANTILLAS: list[Plantilla] = [
         nombre="4.º Trimestre + Resumen Anual (cierre de ejercicio)",
         documentos_def=DOCS_CIERRE,
         usa_navidad=True,
-        titulo=_t_cierre_anual,
-        cuerpo=_c_cierre_anual,
+        titulo_tpl="Solicitud de documentación — 4.º Trimestre y Resumen Anual {anio}",
+        cuerpo_tpl="""Estimado/a {cliente}:
+
+{felicitacion_navidad}
+
+Con motivo del cierre del ejercicio *{anio}*, le informamos de sus próximas obligaciones fiscales. Para poder revisar su documentación y presentar sus impuestos dentro de los plazos legales, necesitamos que nos remita la siguiente información:
+
+{documentos}
+
+Le agradeceríamos que nos remitiera la documentación *antes del {fecha_limite}*, con el fin de garantizar la presentación en plazo de sus impuestos.
+
+{notas}
+
+Quedamos a su disposición para cualquier duda o aclaración.
+
+Reciba un cordial saludo.""",
     ),
     Plantilla(
         id="renta_arrend",
@@ -278,8 +219,22 @@ PLANTILLAS: list[Plantilla] = [
         nombre="Renta — Bienes arrendados",
         documentos_def=DOCS_RENTA,
         usa_navidad=False,
-        titulo=_t_renta_arrend,
-        cuerpo=_c_renta_arrend,
+        titulo_tpl="Solicitud de información — Bienes arrendados · Renta {anio}",
+        cuerpo_tpl="""Estimado/a {cliente}:
+
+Con motivo de la preparación de su declaración de la Renta del ejercicio *{anio}*, necesitamos que nos facilite la información relativa a los bienes que haya tenido arrendados durante el año.
+
+De cada bien arrendado necesitamos lo siguiente:
+
+{documentos}
+
+Le rogamos que nos lo haga llegar *antes del {fecha_limite}* para poder preparar su declaración con tiempo suficiente.
+
+{notas}
+
+Agradecemos de antemano su colaboración y quedamos a su disposición.
+
+Reciba un cordial saludo.""",
     ),
 ]
 
@@ -289,3 +244,191 @@ def por_id(pid: str) -> Plantilla:
         if p.id == pid:
             return p
     return PLANTILLAS[0]
+
+
+# ======================================================================
+#  Overrides (textos editados por el usuario desde la aplicacion)
+# ======================================================================
+_overrides_cache: dict[str, dict[str, str]] | None = None
+
+
+def _overrides_path() -> Path:
+    return config.config_dir() / "plantillas_personalizadas.json"
+
+
+def _overrides() -> dict[str, dict[str, str]]:
+    global _overrides_cache
+    if _overrides_cache is None:
+        try:
+            _overrides_cache = json.loads(_overrides_path().read_text("utf-8"))
+        except Exception:
+            _overrides_cache = {}
+    return _overrides_cache
+
+
+def _guardar_overrides() -> None:
+    try:
+        _overrides_path().write_text(
+            json.dumps(_overrides(), ensure_ascii=False, indent=2), "utf-8")
+    except Exception:
+        pass
+
+
+def tiene_override(plantilla_id: str) -> bool:
+    return plantilla_id in _overrides()
+
+
+def guardar_override(plantilla_id: str, titulo: str, cuerpo: str) -> None:
+    _overrides()[plantilla_id] = {"titulo": titulo, "cuerpo": cuerpo}
+    _guardar_overrides()
+
+
+def restablecer_override(plantilla_id: str) -> None:
+    if plantilla_id in _overrides():
+        del _overrides()[plantilla_id]
+        _guardar_overrides()
+
+
+def titulo_tpl_activo(plantilla: Plantilla) -> str:
+    return _overrides().get(plantilla.id, {}).get("titulo", plantilla.titulo_tpl)
+
+
+def cuerpo_tpl_activo(plantilla: Plantilla) -> str:
+    return _overrides().get(plantilla.id, {}).get("cuerpo", plantilla.cuerpo_tpl)
+
+
+# ======================================================================
+#  Motor de sustitucion de placeholders
+# ======================================================================
+_RE_NEGRITA = re.compile(r"\*([^*\n]+)\*")
+_RE_PLACEHOLDER = re.compile(r"\{(\w+)\}")
+
+
+def _lista_html(items: list[str]) -> str:
+    lis = "".join(f"<li>{html.escape(x.strip(), quote=False)}</li>"
+                  for x in items if x.strip())
+    return f'<ul style="margin:6pt 0;">{lis}</ul>' if lis else ""
+
+
+def _notas_html(notas: str) -> str:
+    if not notas.strip():
+        return ""
+    return "".join(
+        f"<p style='margin:6pt 0;'>{html.escape(ln.strip(), quote=False)}</p>"
+        for ln in notas.strip().splitlines() if ln.strip()
+    )
+
+
+def _tabla_plazos_html(ctx: Contexto) -> str:
+    fecha = html.escape(ctx.fecha_limite_txt, quote=False)
+    borde = "#C9C2AC"
+    return f"""<table width="100%" cellpadding="5" cellspacing="0"
+       style="border-collapse:collapse; margin:6pt 0;">
+  <tr>
+    <td style="border:1px solid {borde}; background:#F3F0E6;"><b>Modalidad de presentación</b></td>
+    <td style="border:1px solid {borde}; background:#F3F0E6;"><b>Plazo límite</b></td>
+  </tr>
+  <tr>
+    <td style="border:1px solid {borde};">Resultado positivo con domiciliación</td>
+    <td style="border:1px solid {borde};">Hasta el 15 del mes de presentación</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid {borde};">Resto de resultados (negativo, a compensar, aplazamiento)</td>
+    <td style="border:1px solid {borde};">Hasta el {fecha}</td>
+  </tr>
+</table>"""
+
+
+def _cliente_nif(nombre: str, nif_ctx: str) -> str:
+    if nif_ctx.strip():
+        return nif_ctx.strip()
+    try:
+        from . import clients
+        nombre_norm = nombre.strip().lower()
+        if nombre_norm:
+            for c in clients.cargar():
+                if c.nombre.strip().lower() == nombre_norm:
+                    return c.nif
+    except Exception:
+        pass
+    return ""
+
+
+def _valores_comunes(ctx: Contexto) -> dict[str, str]:
+    return {
+        "cliente": ctx.cliente.strip() or "cliente",
+        "periodo": ctx.periodo_largo,
+        "anio": str(ctx.anio),
+        "fecha_limite": ctx.fecha_limite_txt,
+        "nif": _cliente_nif(ctx.cliente, ctx.nif),
+    }
+
+
+def _valores_titulo(ctx: Contexto) -> dict[str, str]:
+    return _valores_comunes(ctx)
+
+
+def _valores_cuerpo(ctx: Contexto) -> dict[str, str]:
+    v = {k: html.escape(val, quote=False) for k, val in _valores_comunes(ctx).items()}
+    v["documentos"] = _lista_html(ctx.documentos)
+    v["notas"] = _notas_html(ctx.notas)
+    v["felicitacion_navidad"] = (
+        html.escape(TEXTO_NAVIDAD_DEF, quote=False) if ctx.navidad else "")
+    v["tabla_plazos"] = _tabla_plazos_html(ctx)
+    return v
+
+
+def render_titulo_texto(ctx: Contexto, tpl: str) -> str:
+    """Sustituye los placeholders de un texto de titulo dado (sin mirar overrides)."""
+    valores = _valores_titulo(ctx)
+    return _RE_PLACEHOLDER.sub(lambda m: valores.get(m.group(1), m.group(0)), tpl)
+
+
+def render_titulo(ctx: Contexto, plantilla: Plantilla) -> str:
+    return render_titulo_texto(ctx, titulo_tpl_activo(plantilla))
+
+
+def _procesar_parrafo(texto: str, valores: dict[str, str]) -> str:
+    escapado = html.escape(texto, quote=False)
+    con_negrita = _RE_NEGRITA.sub(lambda m: f"<b>{m.group(1)}</b>", escapado)
+    return _RE_PLACEHOLDER.sub(lambda m: valores.get(m.group(1), m.group(0)), con_negrita)
+
+
+def render_cuerpo_texto(ctx: Contexto, tpl: str) -> str:
+    """Sustituye los placeholders de un texto de cuerpo dado (sin mirar overrides)."""
+    valores = _valores_cuerpo(ctx)
+    bloques: list[str] = []
+    for parrafo in re.split(r"\n\s*\n", tpl.strip()):
+        parrafo = parrafo.strip()
+        if not parrafo:
+            continue
+        solo = re.fullmatch(r"\{(\w+)\}", parrafo)
+        if solo:
+            valor = valores.get(solo.group(1), "")
+            if not valor.strip():
+                continue
+            if valor.lstrip().startswith("<"):
+                bloques.append(valor)
+            else:
+                bloques.append(f'<p style="margin:8pt 0;">{valor}</p>')
+            continue
+        texto = _procesar_parrafo(parrafo, valores)
+        bloques.append(f'<p style="margin:8pt 0;">{texto}</p>')
+    return "\n".join(bloques)
+
+
+def render_cuerpo(ctx: Contexto, plantilla: Plantilla) -> str:
+    return render_cuerpo_texto(ctx, cuerpo_tpl_activo(plantilla))
+
+
+PLACEHOLDERS_DISPONIBLES = [
+    ("{cliente}", "Nombre del cliente (o «cliente» si se deja en blanco)"),
+    ("{periodo}", "Periodo, p. ej. «1.er Trimestre»"),
+    ("{anio}", "Año"),
+    ("{fecha_limite}", "Fecha límite en texto largo"),
+    ("{nif}", "NIF del cliente (si está en la base de datos)"),
+    ("{documentos}", "Lista de documentos solicitados (en su propio párrafo)"),
+    ("{notas}", "Notas adicionales, si las hay (en su propio párrafo)"),
+    ("{tabla_plazos}", "Tabla de plazos — solo en «Recordatorio» (en su propio párrafo)"),
+    ("{felicitacion_navidad}", "Felicitación navideña — solo en «Cierre de ejercicio»"),
+]

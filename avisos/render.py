@@ -16,7 +16,7 @@ from PySide6.QtGui import (
 from PySide6.QtPrintSupport import QPrinter
 
 from . import config
-from .templates import Contexto, Plantilla
+from .templates import Contexto, Plantilla, render_cuerpo, render_titulo
 
 # A4 en mm
 A4_W_MM, A4_H_MM = 210.0, 297.0
@@ -70,8 +70,14 @@ def _doc_cuerpo(html: str, ancho_px: float, base_pt: float) -> QTextDocument:
 
 
 def pintar_pagina(painter: QPainter, ancho_px: float, alto_px: float,
-                  res_dpi: float, ctx: Contexto, plantilla: Plantilla) -> None:
-    """Dibuja el aviso completo dentro de un area ancho_px x alto_px."""
+                  res_dpi: float, titulo: str, cuerpo_html: str,
+                  info: dict | None = None) -> None:
+    """Dibuja el aviso completo dentro de un area ancho_px x alto_px.
+
+    `titulo` y `cuerpo_html` ya vienen resueltos (placeholders sustituidos).
+    Si se pasa `info`, se rellena con info["desborda"] = True/False segun
+    si el cuerpo del texto cabe en el espacio disponible de la pagina.
+    """
     ppm = res_dpi / 25.4  # pixeles por mm
     serif = cargar_fuente()
 
@@ -96,7 +102,6 @@ def pintar_pagina(painter: QPainter, ancho_px: float, alto_px: float,
     y += _mm(ppm, 7)
 
     # --- Titulo ---
-    titulo = plantilla.titulo(ctx)
     ft = QFont(serif)
     ft.setPointSizeF(15.5)
     ft.setBold(True)
@@ -108,16 +113,19 @@ def pintar_pagina(painter: QPainter, ancho_px: float, alto_px: float,
     painter.drawText(rect_titulo, flags, titulo)
     y += br.height() + _mm(ppm, 6)
 
+    # --- Pie de pagina: se calcula antes para saber el hueco disponible ---
+    pie_y = alto_px - _mm(ppm, MARGEN_INF) - _mm(ppm, 13)
+
     # --- Cuerpo (QTextDocument) ---
-    cuerpo_html = plantilla.cuerpo(ctx)
     doc = _doc_cuerpo(cuerpo_html, content_w, 11.0)
+    if info is not None:
+        info["desborda"] = doc.size().height() > (pie_y - y)
     painter.save()
     painter.translate(x0, y)
     doc.drawContents(painter, QRectF(0, 0, content_w, alto_px - y))
     painter.restore()
 
     # --- Pie de pagina (anclado abajo) ---
-    pie_y = alto_px - _mm(ppm, MARGEN_INF) - _mm(ppm, 13)
     painter.fillRect(QRectF(x0, pie_y, content_w, _mm(ppm, 0.5)), QColor(config.GOLD))
     pie_y += _mm(ppm, 2.5)
 
@@ -140,8 +148,13 @@ def pintar_pagina(painter: QPainter, ancho_px: float, alto_px: float,
         pie_y += _mm(ppm, 4.2)
 
 
-def render_preview(ctx: Contexto, plantilla: Plantilla, dpi: float = 110.0) -> QImage:
-    """Devuelve una QImage A4 con el aviso (para la vista previa)."""
+def render_preview_textos(titulo: str, cuerpo_html: str, dpi: float = 110.0,
+                           info: dict | None = None) -> QImage:
+    """Devuelve una QImage A4 a partir de un titulo y un cuerpo ya resueltos.
+
+    Se usa en el editor de plantillas para previsualizar texto todavia sin
+    guardar, sin necesidad de pasar por el sistema de overrides.
+    """
     ppm = dpi / 25.4
     w = int(round(A4_W_MM * ppm))
     h = int(round(A4_H_MM * ppm))
@@ -152,14 +165,26 @@ def render_preview(ctx: Contexto, plantilla: Plantilla, dpi: float = 110.0) -> Q
     p.setRenderHint(QPainter.TextAntialiasing, True)
     p.setRenderHint(QPainter.SmoothPixmapTransform, True)
     try:
-        pintar_pagina(p, w, h, dpi, ctx, plantilla)
+        pintar_pagina(p, w, h, dpi, titulo, cuerpo_html, info=info)
     finally:
         p.end()
     return img
 
 
-def render_pdf(ctx: Contexto, plantilla: Plantilla, ruta: str | Path) -> None:
+def render_preview(ctx: Contexto, plantilla: Plantilla, dpi: float = 110.0,
+                    info: dict | None = None) -> QImage:
+    """Devuelve una QImage A4 con el aviso (para la vista previa)."""
+    titulo = render_titulo(ctx, plantilla)
+    cuerpo_html = render_cuerpo(ctx, plantilla)
+    return render_preview_textos(titulo, cuerpo_html, dpi=dpi, info=info)
+
+
+def render_pdf(ctx: Contexto, plantilla: Plantilla, ruta: str | Path,
+                info: dict | None = None) -> None:
     """Genera el PDF del aviso en `ruta`."""
+    titulo = render_titulo(ctx, plantilla)
+    cuerpo_html = render_cuerpo(ctx, plantilla)
+
     printer = QPrinter(QPrinter.HighResolution)
     printer.setOutputFormat(QPrinter.PdfFormat)
     printer.setOutputFileName(str(ruta))
@@ -173,6 +198,6 @@ def render_pdf(ctx: Contexto, plantilla: Plantilla, ruta: str | Path) -> None:
     try:
         res = printer.resolution()
         page = printer.pageRect(QPrinter.DevicePixel)
-        pintar_pagina(painter, page.width(), page.height(), res, ctx, plantilla)
+        pintar_pagina(painter, page.width(), page.height(), res, titulo, cuerpo_html, info=info)
     finally:
         painter.end()

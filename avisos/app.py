@@ -2,49 +2,59 @@
 from __future__ import annotations
 
 import json
-import re
+import os
 from datetime import date
 from pathlib import Path
 
-from PySide6.QtCore import QDate, Qt, QTimer
-from PySide6.QtGui import QFont, QIcon, QPixmap
+from PySide6.QtCore import QDate, QStringListModel, Qt, QTimer
+from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDateEdit, QFileDialog, QFormLayout, QFrame,
-    QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QMessageBox,
-    QPlainTextEdit, QPushButton, QScrollArea, QSpinBox, QVBoxLayout, QWidget,
+    QCheckBox, QComboBox, QCompleter, QDateEdit, QFileDialog, QFormLayout,
+    QFrame, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMainWindow,
+    QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QSpinBox,
+    QVBoxLayout, QWidget,
 )
 
+from . import clients as C
 from . import config
+from . import history as H
 from . import templates as T
 from .render import render_pdf, render_preview
-
-
-def _slug(texto: str) -> str:
-    texto = texto.lower()
-    repl = {"á": "a", "é": "e", "í": "i", "ó": "o", "ú": "u", "ñ": "n",
-            "º": "", "ª": "", "·": "", ".": "", ",": ""}
-    for k, v in repl.items():
-        texto = texto.replace(k, v)
-    texto = re.sub(r"[^a-z0-9]+", "_", texto).strip("_")
-    return texto or "aviso"
+from .ui.clientes import ClientesDialog
+from .ui.historial import HistorialDialog
+from .ui.lote import LoteDialog
+from .ui.plantillas import PlantillaEditorDialog
+from .ui.preview_widget import PreviewPanel
+from .util import nombre_archivo
 
 
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle(config.APP_NAME)
-        self.resize(1180, 800)
+        self.resize(1360, 880)
         icon = config.asset("EM_logo_horizontal_claro.jpg")
         if icon.exists():
             self.setWindowIcon(QIcon(str(icon)))
 
         self._docs_tocados = False  # si el usuario edito la lista manualmente
+        self._editor_plantillas: PlantillaEditorDialog | None = None
+        self._construir_menu()
         self._construir_ui()
         self._cargar_ajustes()
+        self._refrescar_completer_clientes()
         self._on_plantilla_cambia(forzar_docs=not self._docs_tocados)
         self._programar_preview()
 
     # ------------------------------------------------------------------ UI
+    def _construir_menu(self) -> None:
+        menu = self.menuBar().addMenu("Herramientas")
+        menu.addAction("Clientes…", self._abrir_clientes)
+        menu.addAction("Generar para varios clientes…", self._abrir_lote)
+        menu.addAction("Historial de avisos…", self._abrir_historial)
+        menu.addSeparator()
+        menu.addAction("Editar plantillas…", self._abrir_editor_plantillas)
+
     def _construir_ui(self) -> None:
         central = QWidget()
         self.setCentralWidget(central)
@@ -105,8 +115,12 @@ class MainWindow(QMainWindow):
         self.date_limite = QDateEdit()
         self.date_limite.setCalendarPopup(True)
         self.date_limite.setDisplayFormat("dd/MM/yyyy")
-        self.date_limite.dateChanged.connect(self._programar_preview)
+        self.date_limite.dateChanged.connect(self._on_fecha_cambia)
         ly_d.addRow("Fecha límite:", self.date_limite)
+
+        self.lbl_aviso_fecha = QLabel("")
+        self.lbl_aviso_fecha.setStyleSheet("color:#B3541E; font-size:11px;")
+        ly_d.addRow("", self.lbl_aviso_fecha)
 
         self.chk_navidad = QCheckBox("Incluir felicitación navideña")
         self.chk_navidad.stateChanged.connect(self._programar_preview)
@@ -151,24 +165,28 @@ class MainWindow(QMainWindow):
         lbl = QLabel("Vista previa")
         lbl.setFont(f)
         der.addWidget(lbl)
-        self.preview = QLabel()
-        self.preview.setAlignment(Qt.AlignCenter)
-        self.preview.setStyleSheet("background:#9a9a9a;")
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setWidget(self.preview)
-        der.addWidget(scroll, 1)
-        raiz.addLayout(der, 1)
 
-        self._preview_img = None
-        # Repinta el preview al redimensionar
-        self.preview.resizeEvent = self._on_preview_resize  # type: ignore
+        self.lbl_desborda = QLabel(
+            "⚠ El texto no cabe en una sola página. Acorta la lista de documentos o las notas.")
+        self.lbl_desborda.setStyleSheet(
+            "color:#8A2C0D; background:#FBE4D8; padding:6px; border-radius:4px;")
+        self.lbl_desborda.setWordWrap(True)
+        self.lbl_desborda.setVisible(False)
+        der.addWidget(self.lbl_desborda)
+
+        self.preview = PreviewPanel()
+        der.addWidget(self.preview, 1)
+        raiz.addLayout(der, 1)
 
         # Timer para no regenerar en cada tecla
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
-        self._timer.setInterval(250)
+        self._timer.setInterval(200)
         self._timer.timeout.connect(self._actualizar_preview)
+
+    def showEvent(self, event) -> None:  # noqa: N802
+        super().showEvent(event)
+        QTimer.singleShot(0, self._actualizar_preview)
 
     # --------------------------------------------------------------- estado
     def _plantilla_actual(self) -> T.Plantilla:
@@ -201,7 +219,18 @@ class MainWindow(QMainWindow):
         self.date_limite.blockSignals(True)
         self.date_limite.setDate(QDate(d.year, d.month, d.day))
         self.date_limite.blockSignals(False)
+        self._actualizar_aviso_fecha()
         self._programar_preview()
+
+    def _on_fecha_cambia(self) -> None:
+        self._actualizar_aviso_fecha()
+        self._programar_preview()
+
+    def _actualizar_aviso_fecha(self) -> None:
+        qd = self.date_limite.date()
+        d = date(qd.year(), qd.month(), qd.day())
+        aviso = T.aviso_fecha(d)
+        self.lbl_aviso_fecha.setText(f"⚠ {aviso}" if aviso else "")
 
     def _on_docs_editados(self) -> None:
         self._docs_tocados = True
@@ -224,63 +253,78 @@ class MainWindow(QMainWindow):
             self.cmb_periodo.setCurrentIndex(idx)
             self.cmb_periodo.blockSignals(False)
 
+    def _refrescar_completer_clientes(self) -> None:
+        nombres = [c.nombre for c in C.cargar()]
+        modelo = QStringListModel(nombres, self)
+        completer = QCompleter(modelo, self)
+        completer.setCaseSensitivity(Qt.CaseInsensitive)
+        completer.setFilterMode(Qt.MatchContains)
+        self.txt_cliente.setCompleter(completer)
+
     # -------------------------------------------------------------- preview
     def _programar_preview(self) -> None:
         self._timer.start()
 
     def _actualizar_preview(self) -> None:
-        try:
-            img = render_preview(self._contexto(), self._plantilla_actual())
-            self._preview_img = QPixmap.fromImage(img)
-            self._pintar_preview()
-        except Exception as e:  # no romper la UI por un fallo de render
-            self.preview.setText(f"Error al generar la vista previa:\n{e}")
+        ctx = self._contexto()
+        plantilla = self._plantilla_actual()
 
-    def _pintar_preview(self) -> None:
-        if not self._preview_img:
-            return
-        area = self.preview.size()
-        escalado = self._preview_img.scaled(
-            area, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        self.preview.setPixmap(escalado)
+        def generador(dpi, info):
+            return render_preview(ctx, plantilla, dpi=dpi, info=info)
 
-    def _on_preview_resize(self, event) -> None:
-        self._pintar_preview()
-        QLabel.resizeEvent(self.preview, event)
+        info = self.preview.mostrar(generador)
+        self.lbl_desborda.setVisible(bool(info.get("desborda")))
 
     # ----------------------------------------------------------------- PDF
-    def _nombre_sugerido(self) -> str:
-        ctx = self._contexto()
-        partes = [_slug(self._plantilla_actual().nombre),
-                  ctx.periodo_corto, str(ctx.anio)]
-        if ctx.cliente.strip():
-            partes.append(_slug(ctx.cliente))
-        return "AVISO_" + "_".join(partes).upper() + ".pdf"
-
     def _guardar_pdf(self) -> None:
+        ctx = self._contexto()
+        plantilla = self._plantilla_actual()
         carpeta = self._ultima_carpeta()
         destino, _ = QFileDialog.getSaveFileName(
             self, "Guardar aviso en PDF",
-            str(Path(carpeta) / self._nombre_sugerido()),
+            str(Path(carpeta) / nombre_archivo(plantilla, ctx)),
             "PDF (*.pdf)")
         if not destino:
             return
+        info: dict = {}
         try:
-            render_pdf(self._contexto(), self._plantilla_actual(), destino)
+            render_pdf(ctx, plantilla, destino, info=info)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"No se pudo generar el PDF:\n{e}")
             return
         self._guardar_ajustes(Path(destino).parent)
+        H.registrar(plantilla.nombre, ctx.periodo_corto, ctx.anio, ctx.cliente, destino)
+
+        mensaje = f"Aviso guardado en:\n{destino}"
+        if info.get("desborda"):
+            mensaje += "\n\n⚠ Aviso: el texto no cabía en una sola página; revisa el PDF."
         resp = QMessageBox.question(
-            self, "PDF generado",
-            f"Aviso guardado en:\n{destino}\n\n¿Abrir el archivo?",
+            self, "PDF generado", mensaje + "\n\n¿Abrir el archivo?",
             QMessageBox.Yes | QMessageBox.No)
         if resp == QMessageBox.Yes:
-            import os
             try:
                 os.startfile(destino)  # type: ignore[attr-defined]
             except Exception:
                 pass
+
+    # ------------------------------------------------------------ herramientas
+    def _abrir_clientes(self) -> None:
+        ClientesDialog(self).exec()
+        self._refrescar_completer_clientes()
+
+    def _abrir_lote(self) -> None:
+        LoteDialog(self, self._contexto(), self._plantilla_actual(), self._ultima_carpeta()).exec()
+
+    def _abrir_historial(self) -> None:
+        HistorialDialog(self).exec()
+
+    def _abrir_editor_plantillas(self) -> None:
+        if self._editor_plantillas is None or not self._editor_plantillas.isVisible():
+            self._editor_plantillas = PlantillaEditorDialog(
+                self, on_cambio=self._actualizar_preview)
+        self._editor_plantillas.show()
+        self._editor_plantillas.raise_()
+        self._editor_plantillas.activateWindow()
 
     # ------------------------------------------------------------- ajustes
     def _ultima_carpeta(self) -> str:

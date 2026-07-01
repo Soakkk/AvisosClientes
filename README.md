@@ -17,10 +17,18 @@ periodo, año, fecha límite, nombre del cliente y la lista de documentos.
   - **Recordatorio de plazos — Cierre de trimestre**
   - **4.º Trimestre + Resumen Anual (cierre de ejercicio)** (con felicitación navideña opcional)
   - **Renta — Bienes arrendados**
-- Periodo y **fecha límite** que se rellenan solos (1T→abril, 2T→julio, 3T→octubre, 4T→enero).
+- Periodo y **fecha límite** que se rellenan solos (1T→abril, 2T→julio, 3T→octubre, 4T→enero),
+  con aviso si la fecha cae en fin de semana o festivo nacional fijo.
 - Lista de documentos editable y notas adicionales.
-- **Vista previa en vivo** idéntica al PDF final.
+- **Vista previa en vivo** idéntica al PDF final, ajustada al ancho de la ventana, con aviso
+  si el texto no cabe en una sola página.
 - Cabecera con el logo, colores de marca y pie de página fijo en todos los avisos.
+- **Base de datos de clientes** (nombre, NIF, teléfono, email) con autocompletado en el
+  campo «Cliente» y relleno automático del NIF en el aviso.
+- **Generar para varios clientes**: el mismo aviso (misma plantilla y mismos datos),
+  una copia en PDF individual por cada cliente elegido.
+- **Historial** de avisos generados, con búsqueda por cliente y acceso directo al PDF.
+- **Editor de plantillas** para cambiar los textos desde la propia aplicación, sin tocar código.
 
 ## Estética / manual de estilo
 
@@ -63,16 +71,23 @@ Escáner de Fotos).
 AvisosClientes/
 ├─ avisos/
 │  ├─ config.py      # manual de estilo: colores, datos fijos, rutas
-│  ├─ templates.py   # plantillas y textos
+│  ├─ templates.py   # plantillas, motor de sustitución y overrides editables
 │  ├─ render.py      # composición y export a PDF / vista previa
+│  ├─ clients.py     # base de datos de clientes (JSON)
+│  ├─ history.py     # historial de avisos generados (JSON)
+│  ├─ util.py        # nombre de archivo sugerido
+│  ├─ ui/            # diálogos: clientes, lote, historial, editor de plantillas
 │  ├─ app.py         # ventana principal (PySide6)
 │  └─ main.py        # arranque
 ├─ assets/           # logo, icono y fuentes
-├─ scripts/smoketest.py
+├─ scripts/          # smoketest.py, test_full.py (pruebas de desarrollo)
 ├─ run.py            # lanzador en desarrollo
 ├─ AvisosEMarin.spec # PyInstaller
 └─ installer/        # Inno Setup
 ```
+
+Los datos del usuario (clientes, historial y plantillas personalizadas) se guardan en
+`%APPDATA%\AvisosEMarin\`, fuera del programa, para que sobrevivan a las actualizaciones.
 
 ## Licencia
 
