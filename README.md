@@ -34,9 +34,10 @@ periodo, año, fecha límite, nombre del cliente y la lista de documentos.
   modo que esos datos se siguen rellenando solos; las listas y la tabla de plazos también
   se conservan como comodines. Se puede revisar/deshacer en Editar plantillas.
 - **Documentación opcional reutilizable**: bloques de documentos con nombre (p. ej. «Venta
-  de bienes inmuebles») que se escriben una vez y se añaden o quitan de la lista de
-  documentos solicitados con un clic, en cualquier tipo de aviso. Se gestionan desde
-  Herramientas → Documentación opcional.
+  de bienes inmuebles»), con una frase introductoria opcional y su propia lista, que se
+  añaden o quitan con un clic en cualquier tipo de aviso. Se insertan como su propio
+  párrafo y su propia lista (no se mezclan con la lista de documentos base). Se gestionan
+  desde Herramientas → Documentación opcional.
 - **Vista previa del PDF** en una pestaña, idéntica al PDF final, con aviso si el texto no
   cabe en una sola página o si la fecha límite cae en fin de semana/festivo.
 - Cabecera con el logo, colores de marca y pie de página fijo en todos los avisos.

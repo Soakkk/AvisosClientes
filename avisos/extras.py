@@ -1,6 +1,8 @@
 """Documentacion opcional reutilizable: bloques de documentos (con un
-nombre) que se guardan una vez y se pueden anadir o quitar de la lista
-de documentos solicitados con un clic, en cualquier tipo de aviso."""
+nombre) que se guardan una vez y se pueden anadir o quitar con un clic,
+en cualquier tipo de aviso. Cada bloque se inserta como su propio
+parrafo (con una frase introductoria opcional) y su propia lista, sin
+mezclarse con la lista de documentos base."""
 from __future__ import annotations
 
 import json
@@ -12,6 +14,7 @@ from . import config
 @dataclass
 class Extra:
     etiqueta: str
+    intro: str = ""             # frase antes de la lista, opcional
     lineas: list[str] = field(default_factory=list)
 
 

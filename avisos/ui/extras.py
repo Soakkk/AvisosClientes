@@ -24,6 +24,11 @@ class EditorExtraDialog(QDialog):
         self.txt_etiqueta.setPlaceholderText("p. ej. Venta de bienes inmuebles")
         form.addRow("Nombre:", self.txt_etiqueta)
 
+        self.txt_intro = QLineEdit(extra.intro if extra else "")
+        self.txt_intro.setPlaceholderText(
+            "Opcional: frase antes de la lista, p. ej. «En caso de venta, necesitamos:»")
+        form.addRow("Frase introductoria:", self.txt_intro)
+
         layout = QVBoxLayout(self)
         layout.addLayout(form)
         layout.addWidget(QLabel("Documentos a solicitar (uno por línea):"))
@@ -49,7 +54,8 @@ class EditorExtraDialog(QDialog):
 
     def extra(self) -> X.Extra:
         lineas = [ln.strip() for ln in self.txt_lineas.toPlainText().splitlines() if ln.strip()]
-        return X.Extra(etiqueta=self.txt_etiqueta.text().strip(), lineas=lineas)
+        return X.Extra(etiqueta=self.txt_etiqueta.text().strip(),
+                       intro=self.txt_intro.text().strip(), lineas=lineas)
 
 
 class ExtrasDialog(QDialog):
@@ -97,7 +103,8 @@ class ExtrasDialog(QDialog):
         self.tabla.setRowCount(len(self._extras))
         for fila, e in enumerate(self._extras):
             self.tabla.setItem(fila, 0, QTableWidgetItem(e.etiqueta))
-            self.tabla.setItem(fila, 1, QTableWidgetItem(" · ".join(e.lineas)))
+            resumen = (f"«{e.intro}» " if e.intro else "") + " · ".join(e.lineas)
+            self.tabla.setItem(fila, 1, QTableWidgetItem(resumen))
 
     def _fila_seleccionada(self) -> int:
         filas = self.tabla.selectionModel().selectedRows()

@@ -17,6 +17,7 @@ from avisos import clients as C
 from avisos import estilo as EST
 from avisos import extras as X
 from avisos import history as H
+from avisos import render as R
 from avisos import templates as T
 from avisos.app import MainWindow
 from avisos.ui.clientes import ClientesDialog, EditorClienteDialog
@@ -113,7 +114,7 @@ win._regenerar_editor()  # dejar limpio para el resto del test
 
 # --- documentacion opcional: guardar, marcar/desmarcar, persistencia ---
 check("no hay documentacion opcional al inicio", X.cargar() == [])
-extras_lista = X.upsert([], X.Extra(etiqueta="Venta de bienes",
+extras_lista = X.upsert([], X.Extra(etiqueta="Venta de bienes", intro="En caso de venta:",
                                     lineas=["Escritura de venta.", "Justificante de gastos."]))
 X.guardar(extras_lista)
 check("la documentacion opcional se guarda y recarga", len(X.cargar()) == 1)
@@ -122,19 +123,30 @@ win._refrescar_lista_extras()
 check("el checkbox aparece en el formulario", win.lista_extras.count() == 1)
 item_extra = win.lista_extras.item(0)
 check("el checkbox arranca desmarcado", item_extra.checkState() == Qt.Unchecked)
+check("txt_docs no se toca al marcar (no se mezcla con la lista base)",
+      "Escritura de venta." not in win.txt_docs.toPlainText())
 
 item_extra.setCheckState(Qt.Checked)
 app.processEvents()
-check("marcar el checkbox anade las lineas a documentos",
-      "Escritura de venta." in win.txt_docs.toPlainText())
-check("marcar el checkbox regenera el editor con la linea nueva (no dirty)",
+check("marcar el checkbox NO anade las lineas a la lista base de documentos",
+      "Escritura de venta." not in win.txt_docs.toPlainText())
+check("marcar el checkbox aparece como bloque propio en el editor (no dirty)",
       "Escritura de venta." in win.editor.toPlainText())
+check("la frase introductoria tambien aparece", "En caso de venta:" in win.editor.toPlainText())
+check("_contexto() recoge el extra marcado", len(win._contexto().documentos_extra) == 1)
+
+# el bloque debe ser una lista APARTE de la base (parrafo/lista propios, no
+# mezclado en la misma vineta) -> comprobar via el HTML generado
+ctx_extra = win._contexto()
+cuerpo_html_extra = T.render_cuerpo(ctx_extra, win._plantilla_actual())
+check("el bloque opcional genera su propia lista <ul> (dos <ul> en total)",
+      cuerpo_html_extra.count("<ul") == 2)
 
 item_extra.setCheckState(Qt.Unchecked)
 app.processEvents()
-check("desmarcar el checkbox quita las lineas de documentos",
-      "Escritura de venta." not in win.txt_docs.toPlainText())
-check("desmarcar el checkbox actualiza el editor", "Escritura de venta." not in win.editor.toPlainText())
+check("desmarcar el checkbox quita el bloque del editor",
+      "Escritura de venta." not in win.editor.toPlainText())
+check("_contexto() ya no incluye el extra", len(win._contexto().documentos_extra) == 0)
 
 # restablecer la lista de documentos desmarca los checkboxes
 item_extra.setCheckState(Qt.Checked)
@@ -143,6 +155,15 @@ win._reset_docs()
 app.processEvents()
 check("restablecer la lista desmarca los checkboxes de opcionales",
       win.lista_extras.item(0).checkState() == Qt.Unchecked)
+
+# "Guardar como predeterminado" con un extra marcado no debe duplicar {documentos}
+item_extra.setCheckState(Qt.Checked)
+app.processEvents()
+_tit_extra, _cue_extra = R.documento_a_plantilla(win.editor.document(), win._contexto())
+check("guardar con un extra marcado no duplica el placeholder {documentos}",
+      _cue_extra.count("{documentos}") == 1)
+item_extra.setCheckState(Qt.Unchecked)
+app.processEvents()
 
 dlg_extras = ExtrasDialog(win)
 check("ExtrasDialog se construye", dlg_extras.tabla.rowCount() == 1)

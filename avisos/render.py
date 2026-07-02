@@ -315,7 +315,7 @@ def documento_a_plantilla(doc: QTextDocument, ctx: Contexto) -> tuple[str, str]:
     cuerpo: list[str] = []
     primer = True
     tabla_emitida = False
-    listas_emitidas: set[int] = set()
+    documentos_emitido = False
 
     block = doc.begin()
     while block.isValid():
@@ -326,12 +326,16 @@ def documento_a_plantilla(doc: QTextDocument, ctx: Contexto) -> tuple[str, str]:
                 tabla_emitida = True
             block = block.next()
             continue
-        tl = block.textList()
-        if tl is not None:
-            clave = tl.objectIndex()
-            if clave not in listas_emitidas:
-                listas_emitidas.add(clave)
+        if block.textList() is not None:
+            # Cualquier lista (la base de documentos, o la de un bloque de
+            # documentacion opcional activo) se representa con un unico
+            # {documentos}: ese placeholder es dinamico y ya incluye la
+            # documentacion opcional que este marcada en cada momento, asi
+            # que no hace falta (ni se puede) guardar el texto de una
+            # segunda lista de forma literal.
+            if not documentos_emitido:
                 cuerpo.append("{documentos}")
+                documentos_emitido = True
             block = block.next()
             continue
         if primer:

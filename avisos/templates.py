@@ -179,6 +179,10 @@ class Contexto:
     nif: str = ""
     fecha_limite: date | None = None
     documentos: list[str] = field(default_factory=list)
+    # Bloques de documentacion opcional activos: cada uno es (intro, lineas).
+    # Se insertan como su propio parrafo + su propia lista, separados de
+    # `documentos` (no se mezclan en la misma vineta).
+    documentos_extra: list[tuple[str, list[str]]] = field(default_factory=list)
     navidad: bool = False
     notas: str = ""
 
@@ -405,6 +409,17 @@ def _lista_html(items: list[str]) -> str:
     return f'<ul style="margin:6pt 0;">{lis}</ul>' if lis else ""
 
 
+def _documentos_html(ctx: Contexto) -> str:
+    """Lista base + un parrafo/lista propios por cada bloque de
+    documentacion opcional activo (no se mezclan entre si)."""
+    bloques = [_lista_html(ctx.documentos)]
+    for intro, lineas in ctx.documentos_extra:
+        if intro.strip():
+            bloques.append(f"<p style='margin:6pt 0;'>{html.escape(intro.strip(), quote=False)}</p>")
+        bloques.append(_lista_html(lineas))
+    return "".join(b for b in bloques if b)
+
+
 def _notas_html(notas: str) -> str:
     if not notas.strip():
         return ""
@@ -466,7 +481,7 @@ def _valores_titulo(ctx: Contexto) -> dict[str, str]:
 
 def _valores_cuerpo(ctx: Contexto) -> dict[str, str]:
     v = {k: html.escape(val, quote=False) for k, val in _valores_comunes(ctx).items()}
-    v["documentos"] = _lista_html(ctx.documentos)
+    v["documentos"] = _documentos_html(ctx)
     v["notas"] = _notas_html(ctx.notas)
     v["felicitacion_navidad"] = (
         html.escape(TEXTO_NAVIDAD_DEF, quote=False) if ctx.navidad else "")

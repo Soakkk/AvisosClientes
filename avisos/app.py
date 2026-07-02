@@ -333,9 +333,22 @@ class MainWindow(QMainWindow):
             cliente=self.txt_cliente.text(),
             fecha_limite=date(qd.year(), qd.month(), qd.day()),
             documentos=[ln for ln in self.txt_docs.toPlainText().splitlines()],
+            documentos_extra=self._extras_marcados(),
             navidad=self.chk_navidad.isChecked(),
             notas=self.txt_notas.toPlainText(),
         )
+
+    def _extras_marcados(self) -> list[tuple[str, list[str]]]:
+        if not hasattr(self, "lista_extras"):
+            return []
+        disponibles = {e.etiqueta: e for e in X.cargar()}
+        activos = []
+        for i in range(self.lista_extras.count()):
+            item = self.lista_extras.item(i)
+            if item.checkState() == Qt.Checked and item.text() in disponibles:
+                extra = disponibles[item.text()]
+                activos.append((extra.intro, extra.lineas))
+        return activos
 
     def _aplicar_periodo_sugerido(self) -> None:
         clave, anio = T.periodo_sugerido_hoy()
@@ -404,7 +417,8 @@ class MainWindow(QMainWindow):
             item = QListWidgetItem(extra.etiqueta)
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
             item.setCheckState(Qt.Checked if extra.etiqueta in marcados else Qt.Unchecked)
-            item.setToolTip(" · ".join(extra.lineas))
+            resumen = (f"{extra.intro}\n" if extra.intro else "") + "\n".join(f"• {ln}" for ln in extra.lineas)
+            item.setToolTip(resumen)
             self.lista_extras.addItem(item)
         self.lista_extras.blockSignals(False)
 
@@ -417,20 +431,9 @@ class MainWindow(QMainWindow):
         self.lista_extras.blockSignals(False)
 
     def _on_extra_marcado(self, item: QListWidgetItem) -> None:
-        extra = next((e for e in X.cargar() if e.etiqueta == item.text()), None)
-        if extra is None:
-            return
-        lineas = [ln for ln in self.txt_docs.toPlainText().splitlines()]
-        if item.checkState() == Qt.Checked:
-            for ln in extra.lineas:
-                if ln not in lineas:
-                    lineas.append(ln)
-        else:
-            lineas = [ln for ln in lineas if ln not in extra.lineas]
-        self.txt_docs.blockSignals(True)
-        self.txt_docs.setPlainText("\n".join(lineas))
-        self.txt_docs.blockSignals(False)
-        self._docs_tocados = True
+        # La documentacion opcional se guarda aparte (T.Contexto.documentos_extra)
+        # y se inserta como su propio parrafo/lista: no se mezcla con la
+        # lista base de "Documentos solicitados".
         self._al_cambiar_datos()
 
     def _abrir_extras(self) -> None:
@@ -492,13 +495,18 @@ class MainWindow(QMainWindow):
     def _guardar_como_predeterminado(self) -> None:
         p = self._plantilla_actual()
         ctx = self._contexto()
-        resp = QMessageBox.question(
-            self, "Guardar como predeterminado",
+        mensaje = (
             f"Se guardará el texto actual como el texto base de «{p.nombre}», "
             "para todos los avisos futuros de este tipo.\n\n"
             "Los datos de cliente, periodo y fecha se seguirán rellenando "
             "automáticamente. Podrás revisarlo o deshacerlo en "
-            "Herramientas → Editar plantillas.\n\n¿Continuar?",
+            "Herramientas → Editar plantillas.")
+        if ctx.documentos_extra:
+            mensaje += ("\n\n⚠ Tienes documentación opcional marcada. No se incluirá en el "
+                        "texto base guardado (la documentación opcional sigue siendo "
+                        "opcional, se añade aparte en cada aviso).")
+        resp = QMessageBox.question(
+            self, "Guardar como predeterminado", mensaje + "\n\n¿Continuar?",
             QMessageBox.Yes | QMessageBox.No)
         if resp != QMessageBox.Yes:
             return
