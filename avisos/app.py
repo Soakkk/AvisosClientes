@@ -10,20 +10,23 @@ from PySide6.QtCore import QDate, QStringListModel, Qt, QTimer
 from PySide6.QtGui import QFont, QIcon, QTextListFormat
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QCompleter, QDateEdit, QFormLayout, QFrame,
-    QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QMessageBox,
-    QPlainTextEdit, QPushButton, QScrollArea, QSpinBox, QSplitter,
-    QTabWidget, QTextEdit, QToolButton, QVBoxLayout, QWidget,
+    QGroupBox, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem,
+    QMainWindow, QMessageBox, QPlainTextEdit, QPushButton, QScrollArea,
+    QSpinBox, QSplitter, QTabWidget, QTextEdit, QToolButton, QVBoxLayout,
+    QWidget,
 )
 
 from . import __version__
 from . import clients as C
 from . import config
 from . import estilo as E
+from . import extras as X
 from . import history as H
 from . import render as R
 from . import templates as T
 from .ui.actualizaciones import comprobar_actualizaciones
 from .ui.clientes import ClientesDialog
+from .ui.extras import ExtrasDialog
 from .ui.formato import FormatoDialog
 from .ui.historial import HistorialDialog
 from .ui.lote import LoteDialog
@@ -63,6 +66,7 @@ class MainWindow(QMainWindow):
         self._aplicar_periodo_sugerido()
         self._cargar_ajustes()
         self._refrescar_completer_clientes()
+        self._refrescar_lista_extras()
         self._on_plantilla_cambia(forzar_docs=True)
         self._regenerar_editor()
 
@@ -75,6 +79,7 @@ class MainWindow(QMainWindow):
         menu.addSeparator()
         menu.addAction("Editar plantillas…", self._abrir_editor_plantillas)
         menu.addAction("Formato del documento…", self._abrir_formato)
+        menu.addAction("Documentación opcional…", self._abrir_extras)
 
         ayuda = self.menuBar().addMenu("Ayuda")
         ayuda.addAction("Buscar actualizaciones…", self._buscar_actualizaciones_manual)
@@ -171,12 +176,22 @@ class MainWindow(QMainWindow):
         gb_doc = QGroupBox("Documentos solicitados (uno por línea)")
         ly_doc = QVBoxLayout(gb_doc)
         self.txt_docs = QPlainTextEdit()
-        self.txt_docs.setMinimumHeight(110)
+        self.txt_docs.setMinimumHeight(100)
         self.txt_docs.textChanged.connect(self._on_docs_editados)
         ly_doc.addWidget(self.txt_docs)
         btn_reset = QPushButton("Restablecer lista de la plantilla")
         btn_reset.clicked.connect(self._reset_docs)
         ly_doc.addWidget(btn_reset)
+
+        ly_doc.addWidget(QLabel("Añadir documentación opcional:"))
+        self.lista_extras = QListWidget()
+        self.lista_extras.setMaximumHeight(90)
+        self.lista_extras.itemChanged.connect(self._on_extra_marcado)
+        ly_doc.addWidget(self.lista_extras)
+        btn_gestionar_extras = QPushButton("Gestionar documentación opcional…")
+        btn_gestionar_extras.clicked.connect(self._abrir_extras)
+        ly_doc.addWidget(btn_gestionar_extras)
+
         col.addWidget(gb_doc)
 
         gb_n = QGroupBox("Notas adicionales (opcional)")
@@ -371,10 +386,56 @@ class MainWindow(QMainWindow):
         self.txt_docs.setPlainText("\n".join(docs))
         self.txt_docs.blockSignals(False)
         self._docs_tocados = False
+        self._desmarcar_extras()
 
     def _reset_docs(self) -> None:
         self._set_docs(self._plantilla_actual().documentos_def)
         self._al_cambiar_datos()
+
+    # ------------------------------------------------------- doc. opcional
+    def _refrescar_lista_extras(self) -> None:
+        marcados = {self.lista_extras.item(i).text()
+                   for i in range(self.lista_extras.count())
+                   if self.lista_extras.item(i).checkState() == Qt.Checked} \
+            if hasattr(self, "lista_extras") else set()
+        self.lista_extras.blockSignals(True)
+        self.lista_extras.clear()
+        for extra in sorted(X.cargar(), key=lambda e: e.etiqueta.lower()):
+            item = QListWidgetItem(extra.etiqueta)
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(Qt.Checked if extra.etiqueta in marcados else Qt.Unchecked)
+            item.setToolTip(" · ".join(extra.lineas))
+            self.lista_extras.addItem(item)
+        self.lista_extras.blockSignals(False)
+
+    def _desmarcar_extras(self) -> None:
+        if not hasattr(self, "lista_extras"):
+            return
+        self.lista_extras.blockSignals(True)
+        for i in range(self.lista_extras.count()):
+            self.lista_extras.item(i).setCheckState(Qt.Unchecked)
+        self.lista_extras.blockSignals(False)
+
+    def _on_extra_marcado(self, item: QListWidgetItem) -> None:
+        extra = next((e for e in X.cargar() if e.etiqueta == item.text()), None)
+        if extra is None:
+            return
+        lineas = [ln for ln in self.txt_docs.toPlainText().splitlines()]
+        if item.checkState() == Qt.Checked:
+            for ln in extra.lineas:
+                if ln not in lineas:
+                    lineas.append(ln)
+        else:
+            lineas = [ln for ln in lineas if ln not in extra.lineas]
+        self.txt_docs.blockSignals(True)
+        self.txt_docs.setPlainText("\n".join(lineas))
+        self.txt_docs.blockSignals(False)
+        self._docs_tocados = True
+        self._al_cambiar_datos()
+
+    def _abrir_extras(self) -> None:
+        ExtrasDialog(self).exec()
+        self._refrescar_lista_extras()
 
     def _set_periodo(self, clave: str) -> None:
         idx = self.cmb_periodo.findData(clave)

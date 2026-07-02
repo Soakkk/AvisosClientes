@@ -9,16 +9,18 @@ tmp_cfg = Path(tempfile.mkdtemp())
 os.environ["APPDATA"] = str(tmp_cfg)
 
 from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import Qt, QTimer
 
 app = QApplication([])
 
 from avisos import clients as C
 from avisos import estilo as EST
+from avisos import extras as X
 from avisos import history as H
 from avisos import templates as T
 from avisos.app import MainWindow
 from avisos.ui.clientes import ClientesDialog, EditorClienteDialog
+from avisos.ui.extras import ExtrasDialog
 from avisos.ui.formato import FormatoDialog
 from avisos.ui.historial import HistorialDialog
 from avisos.ui.lote import LoteDialog
@@ -108,6 +110,43 @@ from avisos.render import render_pdf_documento as _render_pdf_doc
 _render_pdf_doc(win.editor.toHtml(), pdf_editor)
 check("el PDF desde el editor se genera", os.path.getsize(pdf_editor) > 1000)
 win._regenerar_editor()  # dejar limpio para el resto del test
+
+# --- documentacion opcional: guardar, marcar/desmarcar, persistencia ---
+check("no hay documentacion opcional al inicio", X.cargar() == [])
+extras_lista = X.upsert([], X.Extra(etiqueta="Venta de bienes",
+                                    lineas=["Escritura de venta.", "Justificante de gastos."]))
+X.guardar(extras_lista)
+check("la documentacion opcional se guarda y recarga", len(X.cargar()) == 1)
+
+win._refrescar_lista_extras()
+check("el checkbox aparece en el formulario", win.lista_extras.count() == 1)
+item_extra = win.lista_extras.item(0)
+check("el checkbox arranca desmarcado", item_extra.checkState() == Qt.Unchecked)
+
+item_extra.setCheckState(Qt.Checked)
+app.processEvents()
+check("marcar el checkbox anade las lineas a documentos",
+      "Escritura de venta." in win.txt_docs.toPlainText())
+check("marcar el checkbox regenera el editor con la linea nueva (no dirty)",
+      "Escritura de venta." in win.editor.toPlainText())
+
+item_extra.setCheckState(Qt.Unchecked)
+app.processEvents()
+check("desmarcar el checkbox quita las lineas de documentos",
+      "Escritura de venta." not in win.txt_docs.toPlainText())
+check("desmarcar el checkbox actualiza el editor", "Escritura de venta." not in win.editor.toPlainText())
+
+# restablecer la lista de documentos desmarca los checkboxes
+item_extra.setCheckState(Qt.Checked)
+app.processEvents()
+win._reset_docs()
+app.processEvents()
+check("restablecer la lista desmarca los checkboxes de opcionales",
+      win.lista_extras.item(0).checkState() == Qt.Unchecked)
+
+dlg_extras = ExtrasDialog(win)
+check("ExtrasDialog se construye", dlg_extras.tabla.rowCount() == 1)
+dlg_extras.close()
 
 # --- dialogos se instancian sin fallar ---
 dlg_clientes = ClientesDialog(win)
