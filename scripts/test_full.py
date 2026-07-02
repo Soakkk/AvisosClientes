@@ -207,6 +207,41 @@ ratio = (filas_600 / filas_96) if filas_96 else 0
 check(f"el texto escala con el DPI real (96dpi={filas_96} filas, 600dpi={filas_600} filas, ratio={ratio:.1f}~6.25)",
       5.0 <= ratio <= 8.0)
 
+# --- "Guardar como predeterminado": round-trip editor -> plantilla ---
+from PySide6.QtGui import QTextDocument as _QTD
+from avisos.render import documento_inicial as _doc_ini, stylesheet as _ss, documento_a_plantilla as _a_tpl
+for _p in T.PLANTILLAS:
+    T.restablecer_override(_p.id)
+    _periodo = "4T" if _p.id == "cierre_anual" else "1T"
+    _ctx = T.Contexto(periodo=_periodo, anio=2026, cliente="Juan Pérez García",
+                      documentos=_p.documentos_def, navidad=False)
+    _html = _doc_ini(_ctx, _p, EST.Estilo())
+    _doc = _QTD()
+    _doc.setDefaultStyleSheet(_ss(EST.Estilo()))
+    _doc.setHtml(_html)
+    _tit, _cue = _a_tpl(_doc, _ctx)
+    check(f"[{_p.id}] re-templatiza el titulo con placeholders",
+          "{anio}" in _tit or "{periodo}" in _tit)
+    check(f"[{_p.id}] el cuerpo recupera el placeholder de cliente", "{cliente}" in _cue)
+    check(f"[{_p.id}] el cuerpo recupera la lista de documentos", "{documentos}" in _cue)
+    # guardar como override y comprobar que se rellena con OTRO cliente
+    T.guardar_override(_p.id, _tit, _cue)
+    _ctx2 = T.Contexto(periodo=_periodo, anio=2027, cliente="Otra Persona SL",
+                       documentos=_p.documentos_def, navidad=False)
+    _resuelto = T.render_cuerpo(_ctx2, _p)
+    check(f"[{_p.id}] el override guardado se rellena con el nuevo cliente/ano",
+          "Otra Persona SL" in _resuelto and "2027" in _resuelto and "Juan Pérez" not in _resuelto)
+    T.restablecer_override(_p.id)
+
+# recordatorio: la tabla de plazos debe convertirse en su placeholder
+_rec = T.por_id("recordatorio")
+_ctx_rec = T.Contexto(periodo="1T", anio=2026, documentos=_rec.documentos_def)
+_doc_rec = _QTD()
+_doc_rec.setDefaultStyleSheet(_ss(EST.Estilo()))
+_doc_rec.setHtml(_doc_ini(_ctx_rec, _rec, EST.Estilo()))
+_tit_rec, _cue_rec = _a_tpl(_doc_rec, _ctx_rec)
+check("recordatorio recupera la tabla de plazos", "{tabla_plazos}" in _cue_rec)
+
 # --- formato configurable (fuente/tamano/interlineado/espacio) ---
 check("estilo por defecto es Georgia 11pt", EST.cargar() == EST.Estilo())
 est_grande = EST.Estilo(fuente="Georgia", tamano_cuerpo=14.0, interlineado=150.0, espacio_parrafo=12.0)

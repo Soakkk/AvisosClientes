@@ -28,6 +28,11 @@ periodo, año, fecha límite, nombre del cliente y la lista de documentos.
   los datos del formulario el texto se reescribe solo (la fecha sigue siendo automática);
   si se ha editado, no se pisa (avisa y deja reescribir a demanda). Botón «Restaurar texto
   de la plantilla».
+- **«Guardar como predeterminado»**: convierte el texto que tengas en el editor en el
+  texto base de ese tipo de aviso, para todos los futuros (p. ej. todos los trimestres).
+  Al guardarlo se reinsertan automáticamente los comodines de cliente, periodo y fecha, de
+  modo que esos datos se siguen rellenando solos; las listas y la tabla de plazos también
+  se conservan como comodines. Se puede revisar/deshacer en Editar plantillas.
 - **Vista previa del PDF** en una pestaña, idéntica al PDF final, con aviso si el texto no
   cabe en una sola página o si la fecha límite cae en fin de semana/festivo.
 - Cabecera con el logo, colores de marca y pie de página fijo en todos los avisos.

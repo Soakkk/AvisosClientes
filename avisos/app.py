@@ -287,6 +287,13 @@ class MainWindow(QMainWindow):
         boton("≡", "Centrar", lambda: self.editor.setAlignment(Qt.AlignHCenter))
         barra.addStretch(1)
 
+        btn_guardar_def = QPushButton("Guardar como predeterminado")
+        btn_guardar_def.setToolTip("Convierte este texto en el texto base para todos los "
+                                   "futuros avisos de este tipo (los datos se seguirán "
+                                   "rellenando solos)")
+        btn_guardar_def.clicked.connect(self._guardar_como_predeterminado)
+        barra.addWidget(btn_guardar_def)
+
         btn_restaurar = QPushButton("Restaurar texto de la plantilla")
         btn_restaurar.setToolTip("Vuelve al texto predefinido con los datos actuales del formulario")
         btn_restaurar.clicked.connect(self._restaurar_texto)
@@ -419,6 +426,36 @@ class MainWindow(QMainWindow):
             if resp != QMessageBox.Yes:
                 return
         self._regenerar_editor()
+
+    def _guardar_como_predeterminado(self) -> None:
+        p = self._plantilla_actual()
+        ctx = self._contexto()
+        resp = QMessageBox.question(
+            self, "Guardar como predeterminado",
+            f"Se guardará el texto actual como el texto base de «{p.nombre}», "
+            "para todos los avisos futuros de este tipo.\n\n"
+            "Los datos de cliente, periodo y fecha se seguirán rellenando "
+            "automáticamente. Podrás revisarlo o deshacerlo en "
+            "Herramientas → Editar plantillas.\n\n¿Continuar?",
+            QMessageBox.Yes | QMessageBox.No)
+        if resp != QMessageBox.Yes:
+            return
+        try:
+            titulo, cuerpo = R.documento_a_plantilla(self.editor.document(), ctx)
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"No se pudo guardar el texto:\n{e}")
+            return
+        if not titulo.strip() or not cuerpo.strip():
+            QMessageBox.warning(self, "No se pudo guardar",
+                                 "El documento parece estar vacío.")
+            return
+        T.guardar_override(p.id, titulo, cuerpo)
+        self._editor_dirty = False
+        self.banner_datos.setVisible(False)
+        QMessageBox.information(
+            self, "Guardado",
+            f"Guardado como texto predeterminado de «{p.nombre}».\n"
+            "Se usará en los próximos avisos de este tipo.")
 
     def _on_editor_cambiado(self) -> None:
         if self._cargando_editor:

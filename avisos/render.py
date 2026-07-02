@@ -7,6 +7,7 @@ que se ve es lo que sale en el PDF.
 """
 from __future__ import annotations
 
+import re
 from html import escape
 from pathlib import Path
 
@@ -218,3 +219,98 @@ def render_pdf(ctx: Contexto, plantilla: Plantilla, ruta: str | Path,
     cuerpo_html = render_cuerpo(ctx, plantilla)
     contenido = componer_documento(titulo, cuerpo_html, est)
     render_pdf_documento(contenido, ruta, info=info, est=est)
+
+
+# ======================================================================
+#  Re-templatizacion: convertir el texto editado en el editor de vuelta a
+#  una plantilla (con placeholders), para "Guardar como predeterminado".
+# ======================================================================
+def _wrap_negrita(t: str) -> str:
+    """Envuelve el nucleo (sin espacios de los extremos) en *...*."""
+    core = t.strip()
+    if not core:
+        return t
+    izq = len(t) - len(t.lstrip())
+    der = len(t) - len(t.rstrip())
+    return t[:izq] + "*" + core + "*" + (t[len(t) - der:] if der else "")
+
+
+def _reverse_scalars(texto: str, ctx: Contexto) -> str:
+    """Sustituye los valores concretos (cliente, fecha, periodo, ano) por
+    sus placeholders, para que el texto guardado se rellene solo cada vez."""
+    # Saludo: "Estimado/a <lo que sea>:" -> "Estimado/a {cliente}:"
+    texto = re.sub(r"(Estimad[oa]/a\s+)([^\n:]{0,80}?)(\s*:)",
+                   r"\1{cliente}\3", texto, count=1)
+    pares = [
+        (ctx.fecha_limite_txt, "{fecha_limite}"),
+        (ctx.periodo_largo, "{periodo}"),
+        (str(ctx.anio), "{anio}"),
+    ]
+    if ctx.cliente.strip():
+        pares.append((ctx.cliente.strip(), "{cliente}"))
+    for viejo, nuevo in sorted(pares, key=lambda p: len(p[0]), reverse=True):
+        if viejo:
+            texto = texto.replace(viejo, nuevo)
+    return texto
+
+
+def _bloque_a_texto(block) -> str:
+    """Texto de un parrafo con la negrita reconvertida a *...*."""
+    partes: list[str] = []
+    it = block.begin()
+    while not it.atEnd():
+        frag = it.fragment()
+        if frag.isValid():
+            t = frag.text()
+            if t.strip() and frag.charFormat().fontWeight() > QFont.Normal:
+                partes.append(_wrap_negrita(t))
+            else:
+                partes.append(t)
+        it += 1
+    unido = "".join(partes)
+    return unido if unido.strip() else block.text()
+
+
+def documento_a_plantilla(doc: QTextDocument, ctx: Contexto) -> tuple[str, str]:
+    """Convierte el contenido editado en (titulo_tpl, cuerpo_tpl) con
+    placeholders. Las listas -> {documentos}, las tablas -> {tabla_plazos}."""
+    rangos_tabla = [(fr.firstPosition(), fr.lastPosition())
+                    for fr in doc.rootFrame().childFrames()]
+
+    def en_tabla(pos: int) -> bool:
+        return any(a <= pos <= b for a, b in rangos_tabla)
+
+    titulo = ""
+    cuerpo: list[str] = []
+    primer = True
+    tabla_emitida = False
+    listas_emitidas: set[int] = set()
+
+    block = doc.begin()
+    while block.isValid():
+        texto = block.text().strip()
+        if en_tabla(block.position()):
+            if not tabla_emitida:
+                cuerpo.append("{tabla_plazos}")
+                tabla_emitida = True
+            block = block.next()
+            continue
+        tl = block.textList()
+        if tl is not None:
+            clave = tl.objectIndex()
+            if clave not in listas_emitidas:
+                listas_emitidas.add(clave)
+                cuerpo.append("{documentos}")
+            block = block.next()
+            continue
+        if primer:
+            if texto:
+                titulo = _reverse_scalars(texto, ctx)
+                primer = False
+            block = block.next()
+            continue
+        if texto:
+            cuerpo.append(_reverse_scalars(_bloque_a_texto(block), ctx))
+        block = block.next()
+
+    return titulo, "\n\n".join(cuerpo)
