@@ -13,7 +13,8 @@ from pathlib import Path
 
 from PySide6.QtCore import QMarginsF, QRectF, Qt
 from PySide6.QtGui import (
-    QColor, QFont, QImage, QPageLayout, QPageSize, QPainter, QTextDocument,
+    QColor, QFont, QImage, QPageLayout, QPageSize, QPainter, QTextBlockFormat,
+    QTextCursor, QTextDocument,
 )
 from PySide6.QtPrintSupport import QPrinter
 
@@ -62,6 +63,36 @@ def componer_documento(titulo: str, cuerpo_html: str, est: E.Estilo) -> str:
         f'color:{config.GREEN};margin-bottom:14pt;">{escape(titulo)}</p>'
     )
     return titulo_html + cuerpo_html
+
+
+_PT_A_PX = 96.0 / 72.0  # 1 pt en pixeles logicos (referencia 96 DPI)
+
+
+def aplicar_margenes_bloques(doc: QTextDocument, est: E.Estilo) -> None:
+    """Aplica el espacio entre parrafos como margen real de cada bloque.
+
+    QTextEdit ignora el `margin` del stylesheet (deja los parrafos pegados),
+    asi que hay que fijarlo por codigo para que el EDITOR muestre el mismo
+    espaciado que el PDF y sea de verdad WYSIWYG."""
+    espacio = est.espacio_parrafo * _PT_A_PX
+    titulo_gap = 14.0 * _PT_A_PX
+    primero_visto = False
+    prev_lista = False
+    block = doc.begin()
+    while block.isValid():
+        if block.textList() is None:
+            bf = block.blockFormat()
+            # Deja aire tras una lista dando margen superior al parrafo siguiente.
+            bf.setTopMargin(espacio if prev_lista else 0)
+            bf.setBottomMargin(titulo_gap if not primero_visto else espacio)
+            cur = QTextCursor(block)
+            cur.mergeBlockFormat(bf)
+            prev_lista = False
+        else:
+            prev_lista = True
+        if block.text().strip():
+            primero_visto = True
+        block = block.next()
 
 
 def documento_inicial(ctx: Contexto, plantilla: Plantilla,

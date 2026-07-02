@@ -411,6 +411,7 @@ class MainWindow(QMainWindow):
         self.editor.document().setDefaultFont(f)
         self.editor.document().setDefaultStyleSheet(R.stylesheet(est))
         self.editor.setHtml(R.documento_inicial(self._contexto(), self._plantilla_actual(), est))
+        R.aplicar_margenes_bloques(self.editor.document(), est)
         self._cargando_editor = False
         self._editor_dirty = False
         self.banner_datos.setVisible(False)
