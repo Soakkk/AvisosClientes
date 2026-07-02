@@ -75,7 +75,39 @@ win = MainWindow()
 win.resize(1360, 880)
 win.show()
 app.processEvents()
+win._actualizar_preview()
+app.processEvents()
 check("MainWindow crea preview", win.preview.label.pixmap() is not None)
+
+# --- editor tipo Word: contenido inicial, dirty y regeneracion ---
+check("el editor arranca con el texto predefinido", "documentación" in win.editor.toPlainText())
+check("el editor no esta 'dirty' al arrancar", win._editor_dirty is False)
+# simular edicion a mano
+win.editor.setFocus()
+win.editor.textCursor().insertText("XYZ_EDICION_MANUAL ")
+app.processEvents()
+check("editar a mano marca el editor como modificado", win._editor_dirty is True)
+# cambiar un dato del formulario NO debe pisar la edicion manual (solo avisa)
+win.txt_cliente.setText("Cliente De Prueba")
+app.processEvents()
+check("cambiar datos con texto editado no pisa el texto (muestra banner)",
+      "XYZ_EDICION_MANUAL" in win.editor.toPlainText() and win.banner_datos.isVisible())
+# restaurar/regenerar descarta la edicion y aplica los datos
+win._regenerar_editor()
+app.processEvents()
+check("regenerar aplica el nombre del cliente al texto",
+      "Cliente De Prueba" in win.editor.toPlainText())
+check("regenerar quita la edicion manual", "XYZ_EDICION_MANUAL" not in win.editor.toPlainText())
+check("tras regenerar, el editor deja de estar modificado", win._editor_dirty is False)
+# el PDF se genera desde el contenido del editor (con una marca manual)
+win.editor.textCursor().insertText("MARCA_EN_PDF ")
+app.processEvents()
+import tempfile as _tf
+pdf_editor = str(Path(_tf.mkdtemp()) / "editor.pdf")
+from avisos.render import render_pdf_documento as _render_pdf_doc
+_render_pdf_doc(win.editor.toHtml(), pdf_editor)
+check("el PDF desde el editor se genera", os.path.getsize(pdf_editor) > 1000)
+win._regenerar_editor()  # dejar limpio para el resto del test
 
 # --- dialogos se instancian sin fallar ---
 dlg_clientes = ClientesDialog(win)

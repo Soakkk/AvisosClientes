@@ -22,9 +22,14 @@ periodo, año, fecha límite, nombre del cliente y la lista de documentos.
   semana o festivo nacional/Viernes Santo), y la fecha de **domiciliación** (ese día menos
   5 naturales), que es la que se usa por defecto en los avisos.
 - Lista de documentos editable y notas adicionales.
-- **Vista previa en vivo** idéntica al PDF final, ajustada al ancho de la ventana (con
-  separador arrastrable respecto al formulario), con aviso si el texto no cabe en una
-  sola página o si la fecha límite cae en fin de semana/festivo.
+- **Editor del documento tipo Word**: el texto predefinido se carga ya resuelto (con
+  cliente, periodo y fecha) y se puede **editar libremente** — añadir líneas y espacios,
+  cambiar palabras, poner negrita/cursiva, viñetas… Si no se ha tocado a mano, al cambiar
+  los datos del formulario el texto se reescribe solo (la fecha sigue siendo automática);
+  si se ha editado, no se pisa (avisa y deja reescribir a demanda). Botón «Restaurar texto
+  de la plantilla».
+- **Vista previa del PDF** en una pestaña, idéntica al PDF final, con aviso si el texto no
+  cabe en una sola página o si la fecha límite cae en fin de semana/festivo.
 - Cabecera con el logo, colores de marca y pie de página fijo en todos los avisos.
 - **Base de datos de clientes** (nombre, NIF, teléfono, email) con autocompletado en el
   campo «Cliente» y relleno automático del NIF en el aviso. Los clientes nuevos se
