@@ -421,12 +421,17 @@ def _documentos_html(ctx: Contexto) -> str:
 
 
 def _notas_html(notas: str) -> str:
-    if not notas.strip():
+    """Las notas se muestran como un anadido aparte: cursiva, letra mas
+    pequena y con el prefijo "Nota:", para distinguirlas del cuerpo
+    principal de la carta."""
+    lineas = [ln.strip() for ln in notas.strip().splitlines() if ln.strip()]
+    if not lineas:
         return ""
-    return "".join(
-        f"<p style='margin:6pt 0;'>{html.escape(ln.strip(), quote=False)}</p>"
-        for ln in notas.strip().splitlines() if ln.strip()
-    )
+    partes = [html.escape(ln, quote=False) for ln in lineas]
+    partes[0] = f"Nota: {partes[0]}"
+    contenido = "<br/>".join(partes)
+    return (f"<p style='margin:6pt 0; font-style:italic; font-size:90%;'>"
+            f"{contenido}</p>")
 
 
 def _tabla_plazos_html(ctx: Contexto) -> str:
