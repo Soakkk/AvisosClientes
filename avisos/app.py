@@ -1,12 +1,11 @@
 """Ventana principal del generador de avisos."""
 from __future__ import annotations
 
-import json
 import os
 from datetime import date
 from pathlib import Path
 
-from PySide6.QtCore import QDate, QStringListModel, Qt, QTimer
+from PySide6.QtCore import QByteArray, QDate, QStringListModel, Qt, QTimer
 from PySide6.QtGui import QFont, QIcon, QTextListFormat
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QCompleter, QDateEdit, QFormLayout, QFrame,
@@ -24,6 +23,7 @@ from . import extras as X
 from . import history as H
 from . import render as R
 from . import templates as T
+from .log import logger
 from .ui.actualizaciones import comprobar_actualizaciones
 from .ui.clientes import ClientesDialog
 from .ui.extras import ExtrasDialog
@@ -80,9 +80,12 @@ class MainWindow(QMainWindow):
         menu.addAction("Editar plantillas…", self._abrir_editor_plantillas)
         menu.addAction("Formato del documento…", self._abrir_formato)
         menu.addAction("Documentación opcional…", self._abrir_extras)
+        menu.addSeparator()
+        menu.addAction("Abrir carpeta de datos…", self._abrir_carpeta_datos)
 
         ayuda = self.menuBar().addMenu("Ayuda")
         ayuda.addAction("Buscar actualizaciones…", self._buscar_actualizaciones_manual)
+        ayuda.addAction("Acerca de…", self._acerca_de)
 
     # ------------------------------------------------------------------ UI
     def _construir_ui(self) -> None:
@@ -91,14 +94,14 @@ class MainWindow(QMainWindow):
         raiz = QVBoxLayout(central)
         raiz.setContentsMargins(14, 14, 14, 14)
 
-        splitter = QSplitter(Qt.Horizontal)
-        raiz.addWidget(splitter)
+        self.splitter = QSplitter(Qt.Horizontal)
+        raiz.addWidget(self.splitter)
 
-        splitter.addWidget(self._construir_formulario())
-        splitter.addWidget(self._construir_editor())
-        splitter.setStretchFactor(0, 0)
-        splitter.setStretchFactor(1, 1)
-        splitter.setSizes([420, 940])
+        self.splitter.addWidget(self._construir_formulario())
+        self.splitter.addWidget(self._construir_editor())
+        self.splitter.setStretchFactor(0, 0)
+        self.splitter.setStretchFactor(1, 1)
+        self.splitter.setSizes([420, 940])
 
         # Timer para no regenerar la vista previa en cada tecla
         self._timer = QTimer(self)
@@ -598,9 +601,12 @@ class MainWindow(QMainWindow):
         try:
             R.render_pdf_documento(self.editor.toHtml(), destino, info=info, est=E.cargar())
         except Exception as e:
+            logger.exception("Fallo al generar el PDF %s", destino)
             QMessageBox.critical(self, "Error", f"No se pudo generar el PDF:\n{e}")
             return
 
+        logger.info("PDF generado: %s (%s %s, cliente=%s)",
+                    destino.name, ctx.periodo_corto, ctx.anio, ctx.cliente or "(generico)")
         H.registrar(plantilla.nombre, ctx.periodo_corto, ctx.anio, ctx.cliente, str(destino))
         if C.asegurar_cliente(ctx.cliente):
             self._refrescar_completer_clientes()
@@ -658,34 +664,71 @@ class MainWindow(QMainWindow):
     def _buscar_actualizaciones_manual(self) -> None:
         comprobar_actualizaciones(self, __version__, silencioso=False)
 
-    # ------------------------------------------------------------- ajustes
-    def _ultima_carpeta(self) -> str:
+    def _abrir_carpeta_datos(self) -> None:
+        """Abre la carpeta donde se guardan clientes, historial, plantillas
+        personalizadas y ajustes — util para hacer copias de seguridad."""
         try:
-            data = json.loads(config.settings_path().read_text("utf-8"))
-            return data.get("ultima_carpeta") or str(Path.home() / "Desktop")
+            os.startfile(str(config.config_dir()))  # type: ignore[attr-defined]
+        except Exception as e:
+            QMessageBox.warning(self, "Carpeta de datos",
+                                 f"No se pudo abrir la carpeta:\n{e}")
+
+    def _acerca_de(self) -> None:
+        QMessageBox.about(
+            self, "Acerca de",
+            f"<b>{config.APP_NAME}</b><br>Versión {__version__}<br><br>"
+            "Generador de avisos a clientes en PDF con la estética de la asesoría.<br><br>"
+            f"Novedades y descargas:<br>"
+            f"<a href='https://github.com/{config.GITHUB_REPO}/releases'>"
+            f"github.com/{config.GITHUB_REPO}/releases</a><br><br>"
+            f"Tus datos se guardan en:<br>{config.config_dir()}")
+
+    # ------------------------------------------------------------- ajustes
+    def _ajustes(self) -> dict:
+        datos = config.leer_json(config.settings_path(), {})
+        return datos if isinstance(datos, dict) else {}
+
+    def _actualizar_ajustes(self, **cambios) -> None:
+        """Actualiza solo las claves indicadas, conservando el resto."""
+        datos = self._ajustes()
+        datos.update(cambios)
+        try:
+            config.escribir_json(config.settings_path(), datos)
         except Exception:
-            return str(Path.home() / "Desktop")
+            pass
+
+    def _ultima_carpeta(self) -> str:
+        return self._ajustes().get("ultima_carpeta") or str(Path.home() / "Desktop")
 
     def _cargar_ajustes(self) -> None:
-        try:
-            data = json.loads(config.settings_path().read_text("utf-8"))
-        except Exception:
-            return
-        pid = data.get("plantilla")
+        datos = self._ajustes()
+        pid = datos.get("plantilla")
         if pid:
             idx = self.cmb_plantilla.findData(pid)
             if idx >= 0:
                 self.cmb_plantilla.blockSignals(True)
                 self.cmb_plantilla.setCurrentIndex(idx)
                 self.cmb_plantilla.blockSignals(False)
+        geometria = datos.get("geometria")
+        if geometria:
+            try:
+                self.restoreGeometry(QByteArray.fromHex(geometria.encode("ascii")))
+            except Exception:
+                pass
+        sizes = datos.get("splitter")
+        if isinstance(sizes, list) and len(sizes) == 2:
+            self.splitter.setSizes([int(s) for s in sizes])
 
     def _guardar_ajustes(self, carpeta: Path) -> None:
-        data = {
-            "plantilla": self.cmb_plantilla.currentData(),
-            "ultima_carpeta": str(carpeta),
-        }
-        try:
-            config.settings_path().write_text(
-                json.dumps(data, ensure_ascii=False, indent=2), "utf-8")
-        except Exception:
-            pass
+        self._actualizar_ajustes(
+            plantilla=self.cmb_plantilla.currentData(),
+            ultima_carpeta=str(carpeta),
+        )
+
+    def closeEvent(self, event) -> None:  # noqa: N802
+        self._actualizar_ajustes(
+            plantilla=self.cmb_plantilla.currentData(),
+            geometria=bytes(self.saveGeometry().toHex()).decode("ascii"),
+            splitter=self.splitter.sizes(),
+        )
+        super().closeEvent(event)

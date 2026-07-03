@@ -3,7 +3,6 @@ por el usuario al estilo Word y guardado para que se aplique a todos los
 avisos futuros."""
 from __future__ import annotations
 
-import json
 from dataclasses import asdict, dataclass
 
 from . import config
@@ -27,15 +26,15 @@ def _ruta():
 
 
 def cargar() -> Estilo:
+    datos = config.leer_json(_ruta(), None)
     try:
-        datos = json.loads(_ruta().read_text("utf-8"))
-        return Estilo(**datos)
+        return Estilo(**datos) if datos else Estilo()
     except Exception:
         return Estilo()
 
 
 def guardar(estilo: Estilo) -> None:
-    _ruta().write_text(json.dumps(asdict(estilo), ensure_ascii=False, indent=2), "utf-8")
+    config.escribir_json(_ruta(), asdict(estilo))
 
 
 def restablecer() -> Estilo:

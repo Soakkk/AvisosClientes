@@ -1,7 +1,6 @@
 """Historial de avisos generados (para consultar que se genero y cuando)."""
 from __future__ import annotations
 
-import json
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -26,11 +25,11 @@ def _ruta() -> Path:
 
 
 def cargar() -> list[Entrada]:
+    datos = config.leer_json(_ruta(), [])
     try:
-        datos = json.loads(_ruta().read_text("utf-8"))
+        return [Entrada(**d) for d in datos]
     except Exception:
         return []
-    return [Entrada(**d) for d in datos]
 
 
 def registrar(plantilla: str, periodo: str, anio: int, cliente: str, ruta: str) -> None:
@@ -44,6 +43,4 @@ def registrar(plantilla: str, periodo: str, anio: int, cliente: str, ruta: str) 
         ruta=str(ruta),
     ))
     entradas = entradas[-_MAX_ENTRADAS:]
-    _ruta().write_text(
-        json.dumps([asdict(e) for e in entradas], ensure_ascii=False, indent=2),
-        "utf-8")
+    config.escribir_json(_ruta(), [asdict(e) for e in entradas])

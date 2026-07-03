@@ -55,6 +55,13 @@ periodo, año, fecha límite, nombre del cliente y la lista de documentos.
   cliente y el tipo de aviso (sin diálogo de guardado).
 - **Comprobación de actualizaciones** contra los releases de GitHub (automática al abrir,
   o desde Ayuda → Buscar actualizaciones): descarga e instala la versión nueva con un clic.
+  La consulta se hace en segundo plano (no congela la interfaz aunque la red vaya lenta).
+- **Robustez**: registro de actividad y errores en `%APPDATA%\AvisosEMarin\avisos.log`
+  (los fallos inesperados muestran un aviso claro en vez de cerrar la app en silencio),
+  y escritura atómica de todos los datos (un corte de luz no corrompe clientes/plantillas).
+- La ventana **recuerda su tamaño y la posición del separador** entre sesiones, y
+  Herramientas → Abrir carpeta de datos da acceso directo a los archivos para copias
+  de seguridad.
 
 ## Cálculo de plazos (AEAT)
 
@@ -109,6 +116,16 @@ Escáner de Fotos).
 1. Compila el .exe con `build_exe.bat`.
 2. Abre `installer\AvisosEMarin.iss` con [Inno Setup](https://jrsoftware.org/isdl.php) y pulsa *Compile*.
 3. El instalador queda en `dist_installer\`.
+
+## Publicar una versión nueva (todo en uno)
+
+```bat
+.venv\Scripts\python scripts\release.py 1.7.0
+```
+
+Actualiza la versión en los dos sitios, ejecuta las pruebas (se detiene si fallan),
+compila el .exe y el instalador, y crea el zip portable. Después solo queda el
+commit/push y `gh release create`.
 
 ## Estructura
 

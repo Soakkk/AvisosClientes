@@ -1,4 +1,9 @@
-"""Descarga e instalacion de actualizaciones desde GitHub."""
+"""Descarga e instalacion de actualizaciones desde GitHub.
+
+Tanto la consulta ("¿hay version nueva?") como la descarga se hacen en
+un hilo aparte, para que la interfaz no se congele si la conexion va
+lenta (especialmente en la comprobacion automatica del arranque).
+"""
 from __future__ import annotations
 
 import os
@@ -10,6 +15,24 @@ from PySide6.QtCore import QThread, Signal
 from PySide6.QtWidgets import QApplication, QMessageBox, QProgressDialog
 
 from .. import updater
+from ..log import logger
+
+
+class _HiloConsulta(QThread):
+    resultado = Signal(object)  # VersionRemota | None
+
+    def run(self) -> None:
+        self.resultado.emit(updater.comprobar())
+
+
+# Hilos de consulta en curso: se esperan al salir de la aplicacion para
+# no destruir un QThread todavia vivo (provocaria un cierre abrupto).
+_consultas_activas: list[_HiloConsulta] = []
+
+
+def esperar_consultas(ms: int = 8000) -> None:
+    for hilo in list(_consultas_activas):
+        hilo.wait(ms)
 
 
 class _HiloDescarga(QThread):
@@ -45,10 +68,25 @@ def comprobar_actualizaciones(parent, version_actual: str, silencioso: bool) -> 
     """Comprueba si hay una version mas nueva en GitHub y ofrece instalarla.
 
     Si `silencioso` es True (comprobacion automatica al abrir), no dice
-    nada si ya esta actualizado o si falla la conexion.
+    nada si ya esta actualizado o si falla la conexion. La consulta se
+    hace en segundo plano: la interfaz sigue respondiendo mientras tanto.
     """
-    remota = updater.comprobar()
+    hilo = _HiloConsulta()
+    _consultas_activas.append(hilo)
+
+    def _con_resultado(remota) -> None:
+        if hilo in _consultas_activas:
+            _consultas_activas.remove(hilo)
+        hilo.deleteLater()
+        _procesar_resultado(parent, version_actual, silencioso, remota)
+
+    hilo.resultado.connect(_con_resultado)
+    hilo.start()
+
+
+def _procesar_resultado(parent, version_actual: str, silencioso: bool, remota) -> None:
     if remota is None:
+        logger.info("Comprobacion de actualizaciones: sin respuesta (o sin red)")
         if not silencioso:
             QMessageBox.warning(parent, "Buscar actualizaciones",
                                  "No se ha podido comprobar si hay una versión nueva.\n"
@@ -60,6 +98,7 @@ def comprobar_actualizaciones(parent, version_actual: str, silencioso: bool) -> 
                                      f"Ya tienes la última versión (v{version_actual}).")
         return
 
+    logger.info("Actualizacion disponible: %s (instalada v%s)", remota.tag, version_actual)
     resp = QMessageBox.question(
         parent, "Actualización disponible",
         f"Hay una versión nueva disponible: {remota.tag} (tienes v{version_actual}).\n\n"

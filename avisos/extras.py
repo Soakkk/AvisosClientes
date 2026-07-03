@@ -5,7 +5,6 @@ parrafo (con una frase introductoria opcional) y su propia lista, sin
 mezclarse con la lista de documentos base."""
 from __future__ import annotations
 
-import json
 from dataclasses import asdict, dataclass, field
 
 from . import config
@@ -23,8 +22,8 @@ def _ruta():
 
 
 def cargar() -> list[Extra]:
+    datos = config.leer_json(_ruta(), [])
     try:
-        datos = json.loads(_ruta().read_text("utf-8"))
         return [Extra(**d) for d in datos]
     except Exception:
         return []
@@ -32,8 +31,7 @@ def cargar() -> list[Extra]:
 
 def guardar(extras: list[Extra]) -> None:
     ordenados = sorted(extras, key=lambda e: e.etiqueta.lower())
-    _ruta().write_text(
-        json.dumps([asdict(e) for e in ordenados], ensure_ascii=False, indent=2), "utf-8")
+    config.escribir_json(_ruta(), [asdict(e) for e in ordenados])
 
 
 def upsert(extras: list[Extra], nuevo: Extra, etiqueta_original: str = "") -> list[Extra]:

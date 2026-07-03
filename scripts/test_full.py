@@ -75,6 +75,7 @@ check("nif se autocompleta desde la base de clientes", valores["nif"] == "123456
 
 # --- MainWindow arranca sin errores ---
 win = MainWindow()
+win._comprobacion_inicial_hecha = True  # sin red ni hilos de actualizacion en tests
 win.resize(1360, 880)
 win.show()
 app.processEvents()
@@ -340,6 +341,27 @@ check("version_tupla compara correctamente", U._version_tupla("v1.2.0") > U._ver
 remota_falsa = U.VersionRemota(tag="v1.2.0", version=(1, 2, 0), url_instalador="http://x", notas="")
 check("hay_actualizacion detecta version mas nueva", U.hay_actualizacion("1.1.0", remota_falsa) is True)
 check("hay_actualizacion no marca la misma version", U.hay_actualizacion("1.2.0", remota_falsa) is False)
+
+# --- escritura atomica de JSON ---
+from avisos import config as CFG
+ruta_json = Path(tempfile.mkdtemp()) / "atomico.json"
+CFG.escribir_json(ruta_json, {"a": 1, "acentos": "áéñ"})
+check("escribir_json escribe y leer_json recupera",
+      CFG.leer_json(ruta_json, None) == {"a": 1, "acentos": "áéñ"})
+check("escribir_json no deja archivo temporal",
+      not ruta_json.with_suffix(".json.tmp").exists())
+check("leer_json devuelve el valor por defecto si no existe",
+      CFG.leer_json(ruta_json.parent / "no_existe.json", "def") == "def")
+ruta_json.write_text("{corrupto", "utf-8")
+check("leer_json tolera un archivo corrupto", CFG.leer_json(ruta_json, {}) == {})
+
+# --- log: configurar y excepthook no rompen ---
+from avisos import log as LOG
+LOG.configurar()
+LOG.logger.info("linea de prueba desde test_full")
+check("el archivo de log existe tras configurar", LOG.ruta_log().exists())
+LOG.instalar_excepthook()
+check("el excepthook queda instalado", sys.excepthook is not sys.__excepthook__)
 
 if errores:
     print(f"\n{len(errores)} FALLO(S): {errores}")

@@ -5,6 +5,7 @@ los avisos salgan siempre identicos.
 """
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -72,3 +73,19 @@ def config_dir() -> Path:
 
 def settings_path() -> Path:
     return config_dir() / "settings.json"
+
+
+def escribir_json(ruta: Path, datos) -> None:
+    """Escritura atomica: primero a un archivo temporal y luego se
+    sustituye de golpe, para que un corte de luz o un fallo a mitad de
+    escritura no deje corrupto el archivo (clientes, historial, etc.)."""
+    tmp = ruta.with_suffix(ruta.suffix + ".tmp")
+    tmp.write_text(json.dumps(datos, ensure_ascii=False, indent=2), "utf-8")
+    os.replace(tmp, ruta)
+
+
+def leer_json(ruta: Path, por_defecto):
+    try:
+        return json.loads(ruta.read_text("utf-8"))
+    except Exception:
+        return por_defecto

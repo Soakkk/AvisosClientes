@@ -3,7 +3,7 @@
 ; Compilar este instalador con Inno Setup (ISCC.exe AvisosEMarin.iss).
 
 #define MyAppName "Avisos Asesoria E. Marin"
-#define MyAppVersion "1.6.3"
+#define MyAppVersion "1.7.0"
 #define MyAppPublisher "Asesoria E. Marin"
 #define MyAppExeName "AvisosEMarin.exe"
 

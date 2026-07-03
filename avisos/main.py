@@ -5,14 +5,22 @@ import sys
 
 from PySide6.QtWidgets import QApplication
 
-from . import config
+from . import config, log
 from .app import MainWindow
 
 
 def main() -> int:
+    log.configurar()
+    log.instalar_excepthook()
     app = QApplication(sys.argv)
     app.setApplicationName(config.APP_NAME)
     app.setOrganizationName(config.ORG_NAME)
+
+    # Al salir, esperar a que termine cualquier consulta de actualizaciones
+    # en segundo plano (destruir un hilo vivo cerraria la app de golpe).
+    from .ui.actualizaciones import esperar_consultas
+    app.aboutToQuit.connect(esperar_consultas)
+
     win = MainWindow()
     win.show()
     return app.exec()

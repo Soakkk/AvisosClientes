@@ -6,8 +6,7 @@ destinatarios en la generacion en lote.
 """
 from __future__ import annotations
 
-import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from . import config
@@ -26,18 +25,16 @@ def _ruta() -> Path:
 
 
 def cargar() -> list[Cliente]:
+    datos = config.leer_json(_ruta(), [])
     try:
-        datos = json.loads(_ruta().read_text("utf-8"))
+        return [Cliente(**d) for d in datos]
     except Exception:
         return []
-    return [Cliente(**d) for d in datos]
 
 
 def guardar(clientes: list[Cliente]) -> None:
     ordenados = sorted(clientes, key=lambda c: c.nombre.lower())
-    _ruta().write_text(
-        json.dumps([asdict(c) for c in ordenados], ensure_ascii=False, indent=2),
-        "utf-8")
+    config.escribir_json(_ruta(), [asdict(c) for c in ordenados])
 
 
 def upsert(clientes: list[Cliente], nuevo: Cliente, nombre_original: str = "") -> list[Cliente]:

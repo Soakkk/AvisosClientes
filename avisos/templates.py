@@ -20,7 +20,6 @@ tienen prioridad sobre el texto de fabrica.
 from __future__ import annotations
 
 import html
-import json
 import re
 from dataclasses import dataclass, field
 from datetime import date, timedelta
@@ -358,17 +357,14 @@ def _overrides_path() -> Path:
 def _overrides() -> dict[str, dict[str, str]]:
     global _overrides_cache
     if _overrides_cache is None:
-        try:
-            _overrides_cache = json.loads(_overrides_path().read_text("utf-8"))
-        except Exception:
-            _overrides_cache = {}
+        datos = config.leer_json(_overrides_path(), {})
+        _overrides_cache = datos if isinstance(datos, dict) else {}
     return _overrides_cache
 
 
 def _guardar_overrides() -> None:
     try:
-        _overrides_path().write_text(
-            json.dumps(_overrides(), ensure_ascii=False, indent=2), "utf-8")
+        config.escribir_json(_overrides_path(), _overrides())
     except Exception:
         pass
 

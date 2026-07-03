@@ -1,7 +1,6 @@
 """Dialogo de gestion de la base de datos de clientes."""
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QHeaderView,
     QLineEdit, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem,

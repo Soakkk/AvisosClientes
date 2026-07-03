@@ -13,7 +13,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QMarginsF, QRectF, Qt
 from PySide6.QtGui import (
-    QColor, QFont, QImage, QPageLayout, QPageSize, QPainter, QTextBlockFormat,
+    QColor, QFont, QImage, QPageLayout, QPageSize, QPainter,
     QTextCursor, QTextDocument,
 )
 from PySide6.QtPrintSupport import QPrinter
