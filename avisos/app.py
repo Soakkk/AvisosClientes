@@ -479,7 +479,13 @@ class MainWindow(QMainWindow):
         self._cargando_editor = False
         self._editor_dirty = False
         self.banner_datos.setVisible(False)
-        self._programar_preview()
+        # Si ya se esta mirando la pestana de vista previa, refrescarla al
+        # instante (sin esperar el pequeno retardo que evita recalcular en
+        # cada tecla mientras se escribe en el formulario).
+        if self.tabs.tabText(self.tabs.currentIndex()).startswith("Vista"):
+            self._actualizar_preview()
+        else:
+            self._programar_preview()
 
     def _restaurar_texto(self) -> None:
         if self._editor_dirty:
