@@ -338,7 +338,9 @@ check("asegurar_cliente no duplica uno existente", C.asegurar_cliente("Cliente N
 # --- updater: logica pura sin red ---
 from avisos import updater as U
 check("version_tupla compara correctamente", U._version_tupla("v1.2.0") > U._version_tupla("v1.1.0"))
-remota_falsa = U.VersionRemota(tag="v1.2.0", version=(1, 2, 0), url_instalador="http://x", notas="")
+remota_falsa = U.VersionRemota(
+    tag="v1.2.0", version=(1, 2, 0), url_instalador="http://x",
+    url_sha256="http://x.sha256", notas="")
 check("hay_actualizacion detecta version mas nueva", U.hay_actualizacion("1.1.0", remota_falsa) is True)
 check("hay_actualizacion no marca la misma version", U.hay_actualizacion("1.2.0", remota_falsa) is False)
 

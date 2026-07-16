@@ -3,7 +3,9 @@
 ; Compilar este instalador con Inno Setup (ISCC.exe AvisosEMarin.iss).
 
 #define MyAppName "Avisos Asesoria E. Marin"
-#define MyAppVersion "1.7.0"
+#ifndef MyAppVersion
+  #define MyAppVersion "1.8.0"
+#endif
 #define MyAppPublisher "Asesoria E. Marin"
 #define MyAppExeName "AvisosEMarin.exe"
 
@@ -12,7 +14,7 @@ AppId={{B4F1B2A7-1E9A-4C77-9A2B-AV1S0SEMAR1N}}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
-DefaultDirName={autopf}\AvisosEMarin
+DefaultDirName={localappdata}\Programs\AvisosEMarin
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputDir=..\dist_installer
@@ -22,6 +24,9 @@ Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 ArchitecturesInstallIn64BitMode=x64compatible
+PrivilegesRequired=lowest
+CloseApplications=yes
+RestartApplications=yes
 
 [Languages]
 Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
@@ -39,3 +44,4 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Abrir {#MyAppName}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Flags: nowait skipifnotsilent

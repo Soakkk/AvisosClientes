@@ -6,7 +6,9 @@ lenta (especialmente en la comprobacion automatica del arranque).
 """
 from __future__ import annotations
 
-import os
+import hashlib
+import re
+import subprocess
 import tempfile
 import urllib.request
 from pathlib import Path
@@ -40,13 +42,26 @@ class _HiloDescarga(QThread):
     terminado = Signal(str)
     fallo = Signal(str)
 
-    def __init__(self, url: str, destino: Path) -> None:
+    def __init__(self, url: str, url_sha256: str, destino: Path) -> None:
         super().__init__()
         self._url = url
+        self._url_sha256 = url_sha256
         self._destino = destino
+
+    def _hash_esperado(self) -> str | None:
+        if not self._url_sha256:
+            return None
+        peticion = urllib.request.Request(
+            self._url_sha256, headers={"User-Agent": "AvisosEMarin"})
+        with urllib.request.urlopen(peticion, timeout=20) as resp:
+            texto = resp.read().decode("utf-8", "replace")
+        encontrado = re.search(r"\b([0-9a-fA-F]{64})\b", texto)
+        return encontrado.group(1).lower() if encontrado else None
 
     def run(self) -> None:
         try:
+            esperado = self._hash_esperado()
+            digestor = hashlib.sha256()
             peticion = urllib.request.Request(self._url, headers={"User-Agent": "AvisosEMarin"})
             with urllib.request.urlopen(peticion, timeout=20) as resp:
                 total = int(resp.headers.get("Content-Length", 0)) or 1
@@ -57,8 +72,12 @@ class _HiloDescarga(QThread):
                         if not bloque:
                             break
                         f.write(bloque)
+                        digestor.update(bloque)
                         leido += len(bloque)
                         self.progreso.emit(int(leido * 100 / total))
+            if esperado and digestor.hexdigest() != esperado:
+                self._destino.unlink(missing_ok=True)
+                raise ValueError("La verificación de integridad SHA-256 no coincide")
             self.terminado.emit(str(self._destino))
         except Exception as e:
             self.fallo.emit(str(e))
@@ -113,13 +132,16 @@ def _procesar_resultado(parent, version_actual: str, silencioso: bool, remota) -
     progreso.setMinimumDuration(0)
     progreso.setAutoClose(False)
 
-    hilo = _HiloDescarga(remota.url_instalador, destino)
+    hilo = _HiloDescarga(remota.url_instalador, remota.url_sha256, destino)
     hilo.progreso.connect(progreso.setValue)
 
     def _al_terminar(ruta: str) -> None:
         progreso.close()
         try:
-            os.startfile(ruta)  # type: ignore[attr-defined]
+            subprocess.Popen(
+                [ruta, "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"],
+                close_fds=True,
+            )
         except Exception as e:
             QMessageBox.critical(parent, "Error", f"No se pudo iniciar el instalador:\n{e}")
             return

@@ -12,7 +12,7 @@ from pathlib import Path
 
 APP_NAME = "Avisos Asesoria E. Marin"
 ORG_NAME = "Asesoria E. Marin"
-GITHUB_REPO = "Soakkk/AvisosClientes"
+GITHUB_REPO = "Soakkk/Generador-carta-cliente"
 
 # --- Paleta de marca (manual de estilo) ---------------------------------
 GREEN = "#2E4A3C"        # verde corporativo (logo)

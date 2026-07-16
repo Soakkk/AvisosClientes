@@ -20,6 +20,7 @@ class VersionRemota:
     tag: str
     version: tuple[int, int, int]
     url_instalador: str
+    url_sha256: str
     notas: str
 
 
@@ -44,16 +45,19 @@ def comprobar() -> VersionRemota | None:
 
     tag = datos.get("tag_name", "")
     instalador = ""
+    sha256 = ""
     for asset in datos.get("assets", []):
         nombre = asset.get("name", "")
         if nombre.lower().endswith(".exe") and "setup" in nombre.lower():
             instalador = asset.get("browser_download_url", "")
-            break
+        elif nombre.lower().endswith(".sha256"):
+            sha256 = asset.get("browser_download_url", "")
     if not tag or not instalador:
         return None
     return VersionRemota(
         tag=tag, version=_version_tupla(tag),
-        url_instalador=instalador, notas=datos.get("body", ""))
+        url_instalador=instalador, url_sha256=sha256,
+        notas=datos.get("body", ""))
 
 
 def hay_actualizacion(version_actual: str, remota: VersionRemota) -> bool:

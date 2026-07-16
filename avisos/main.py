@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QApplication
 
 from . import config, log
 from .app import MainWindow
+from .tema_ui import aplicar_tema
 
 
 def main() -> int:
@@ -15,6 +16,7 @@ def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName(config.APP_NAME)
     app.setOrganizationName(config.ORG_NAME)
+    aplicar_tema(app)
 
     # Al salir, esperar a que termine cualquier consulta de actualizaciones
     # en segundo plano (destruir un hilo vivo cerraria la app de golpe).

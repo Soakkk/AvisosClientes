@@ -6,7 +6,7 @@ from datetime import date
 from pathlib import Path
 
 from PySide6.QtCore import QByteArray, QDate, QStringListModel, Qt, QTimer
-from PySide6.QtGui import QFont, QIcon, QTextListFormat
+from PySide6.QtGui import QFont, QIcon, QPixmap, QTextListFormat
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QCompleter, QDateEdit, QFormLayout, QFrame,
     QGroupBox, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem,
@@ -50,7 +50,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle(f"{config.APP_NAME} — v{__version__}")
         self.resize(1360, 880)
-        icon = config.asset("EM_logo_horizontal_claro.jpg")
+        icon = config.asset("app-icon.png")
         if icon.exists():
             self.setWindowIcon(QIcon(str(icon)))
 
@@ -92,10 +92,43 @@ class MainWindow(QMainWindow):
         central = QWidget()
         self.setCentralWidget(central)
         raiz = QVBoxLayout(central)
-        raiz.setContentsMargins(14, 14, 14, 14)
+        raiz.setContentsMargins(0, 0, 0, 0)
+        raiz.setSpacing(0)
+
+        cabecera = QFrame()
+        cabecera.setObjectName("cabecera")
+        cabecera.setFixedHeight(92)
+        lc = QHBoxLayout(cabecera)
+        lc.setContentsMargins(24, 14, 24, 14)
+        logo = QLabel()
+        logo.setPixmap(QPixmap(str(config.asset("app-icon.png"))).scaled(
+            52, 52, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        logo.setFixedSize(56, 56)
+        lc.addWidget(logo)
+        marca = QVBoxLayout()
+        titulo = QLabel("Avisos Asesoría E. Marín")
+        titulo.setObjectName("marca")
+        subtitulo = QLabel("Prepare, revise y guarde avisos manteniendo el formato corporativo")
+        subtitulo.setObjectName("marcaSubtitulo")
+        marca.addWidget(titulo)
+        marca.addWidget(subtitulo)
+        lc.addLayout(marca)
+        lc.addStretch()
+        for texto, activo in (("1  Preparar", True), ("2  Revisar", False),
+                              ("3  Generar PDF", False)):
+            paso = QLabel(texto)
+            paso.setObjectName("pasoActivo" if activo else "pasoInactivo")
+            lc.addWidget(paso)
+        raiz.addWidget(cabecera)
+
+        contenido = QWidget()
+        cuerpo = QVBoxLayout(contenido)
+        cuerpo.setContentsMargins(18, 16, 18, 14)
+        cuerpo.setSpacing(0)
 
         self.splitter = QSplitter(Qt.Horizontal)
-        raiz.addWidget(self.splitter)
+        cuerpo.addWidget(self.splitter)
+        raiz.addWidget(contenido, 1)
 
         self.splitter.addWidget(self._construir_formulario())
         self.splitter.addWidget(self._construir_editor())
@@ -111,22 +144,25 @@ class MainWindow(QMainWindow):
 
     def _construir_formulario(self) -> QWidget:
         panel = QWidget()
+        panel.setObjectName("tarjeta")
         panel.setMinimumWidth(300)
         form_scroll = QScrollArea()
         form_scroll.setWidgetResizable(True)
         form_scroll.setWidget(panel)
         form_scroll.setFrameShape(QFrame.NoFrame)
         col = QVBoxLayout(panel)
+        col.setContentsMargins(14, 14, 14, 14)
         col.setSpacing(12)
 
-        titulo = QLabel("Generador de avisos")
-        f = QFont()
-        f.setPointSize(15)
-        f.setBold(True)
-        titulo.setFont(f)
+        titulo = QLabel("Preparar aviso")
+        titulo.setObjectName("tituloSeccion")
+        ayuda = QLabel("Complete los datos de arriba abajo. La vista previa no altera el PDF final.")
+        ayuda.setObjectName("textoSuave")
+        ayuda.setWordWrap(True)
         col.addWidget(titulo)
+        col.addWidget(ayuda)
 
-        gb_pl = QGroupBox("Plantilla")
+        gb_pl = QGroupBox("1 · Plantilla")
         ly_pl = QVBoxLayout(gb_pl)
         self.cmb_plantilla = QComboBox()
         for p in T.PLANTILLAS:
@@ -137,7 +173,7 @@ class MainWindow(QMainWindow):
         ly_pl.addWidget(self.cmb_plantilla)
         col.addWidget(gb_pl)
 
-        gb_d = QGroupBox("Datos del aviso")
+        gb_d = QGroupBox("2 · Datos del aviso")
         ly_d = QFormLayout(gb_d)
         ly_d.setLabelAlignment(Qt.AlignRight)
 
@@ -176,7 +212,7 @@ class MainWindow(QMainWindow):
 
         col.addWidget(gb_d)
 
-        gb_doc = QGroupBox("Documentos solicitados (uno por línea)")
+        gb_doc = QGroupBox("3 · Documentos solicitados")
         ly_doc = QVBoxLayout(gb_doc)
         self.txt_docs = QPlainTextEdit()
         self.txt_docs.setMinimumHeight(100)
@@ -197,7 +233,7 @@ class MainWindow(QMainWindow):
 
         col.addWidget(gb_doc)
 
-        gb_n = QGroupBox("Notas adicionales (opcional)")
+        gb_n = QGroupBox("4 · Notas adicionales (opcional)")
         ly_n = QVBoxLayout(gb_n)
         self.txt_notas = QPlainTextEdit()
         self.txt_notas.setMaximumHeight(70)
@@ -206,6 +242,7 @@ class MainWindow(QMainWindow):
         col.addWidget(gb_n)
 
         self.btn_pdf = QPushButton("Generar y guardar PDF en el Escritorio")
+        self.btn_pdf.setObjectName("primario")
         self.btn_pdf.setMinimumHeight(40)
         self.btn_pdf.clicked.connect(self._guardar_pdf)
         col.addWidget(self.btn_pdf)
@@ -215,8 +252,16 @@ class MainWindow(QMainWindow):
 
     def _construir_editor(self) -> QWidget:
         contenedor = QWidget()
+        contenedor.setObjectName("tarjeta")
         lay = QVBoxLayout(contenedor)
-        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setContentsMargins(14, 14, 14, 14)
+
+        titulo = QLabel("Revisión del documento")
+        titulo.setObjectName("tituloSeccion")
+        ayuda = QLabel("Edite el contenido o compruebe la vista previa antes de generar el PDF")
+        ayuda.setObjectName("textoSuave")
+        lay.addWidget(titulo)
+        lay.addWidget(ayuda)
 
         self.tabs = QTabWidget()
 
@@ -243,9 +288,8 @@ class MainWindow(QMainWindow):
         doc_lay.addLayout(self._construir_barra_formato())
 
         self.editor = QTextEdit()
+        self.editor.setObjectName("editorDocumento")
         self.editor.setAcceptRichText(True)
-        self.editor.setStyleSheet(
-            "QTextEdit{background:#FFFFFF; border:1px solid #C9C2AC; padding:22px;}")
         self.editor.textChanged.connect(self._on_editor_cambiado)
         self.editor.cursorPositionChanged.connect(self._sincronizar_barra_formato)
         doc_lay.addWidget(self.editor, 1)
