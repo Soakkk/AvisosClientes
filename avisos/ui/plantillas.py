@@ -6,13 +6,14 @@ from typing import Callable
 
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
-    QComboBox, QDialogButtonBox, QHBoxLayout, QLabel, QLineEdit,
+    QDialogButtonBox, QHBoxLayout, QLabel, QLineEdit,
     QMessageBox, QPlainTextEdit, QPushButton, QSplitter, QVBoxLayout, QWidget,
 )
 from PySide6.QtCore import Qt
 
 from .. import templates as T
 from ..render import render_preview_textos
+from .controles import ComboSinRueda
 from .preview_widget import PreviewPanel
 
 
@@ -30,12 +31,20 @@ class PlantillaEditorDialog(QWidget):
         izq = QWidget()
         col = QVBoxLayout(izq)
 
-        self.cmb_plantilla = QComboBox()
+        self.cmb_plantilla = ComboSinRueda()
         for p in T.PLANTILLAS:
-            self.cmb_plantilla.addItem(f"{p.grupo} · {p.nombre}", p.id)
+            self.cmb_plantilla.addItem(p.nombre, p.id)
+            self.cmb_plantilla.setItemData(
+                self.cmb_plantilla.count() - 1, f"{p.grupo}\n{p.nombre}", Qt.ToolTipRole)
+        ancho = max((self.cmb_plantilla.fontMetrics().horizontalAdvance(
+            self.cmb_plantilla.itemText(i)) for i in range(self.cmb_plantilla.count())), default=0)
+        self.cmb_plantilla.view().setMinimumWidth(min(ancho + 56, 620))
         self.cmb_plantilla.currentIndexChanged.connect(self._cargar_plantilla)
         col.addWidget(QLabel("Plantilla:"))
         col.addWidget(self.cmb_plantilla)
+        self.lbl_grupo = QLabel("")
+        self.lbl_grupo.setObjectName("textoSuave")
+        col.addWidget(self.lbl_grupo)
 
         self.lbl_estado = QLabel("")
         col.addWidget(self.lbl_estado)
@@ -113,6 +122,7 @@ class PlantillaEditorDialog(QWidget):
     def _cargar_plantilla(self) -> None:
         self._cargando = True
         p = self._plantilla_actual()
+        self.lbl_grupo.setText(p.grupo)
         self.txt_titulo.setText(T.titulo_tpl_activo(p))
         self.txt_cuerpo.setPlainText(T.cuerpo_tpl_activo(p))
         self._actualizar_estado(p)

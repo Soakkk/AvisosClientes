@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import subprocess
 from pathlib import Path
+from typing import Callable
 
 from PySide6.QtWidgets import (
     QDialog, QDialogButtonBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
@@ -14,16 +15,18 @@ from .. import history as H
 
 
 class HistorialDialog(QDialog):
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent=None,
+                 on_reutilizar: Callable[[H.Entrada], None] | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Historial de avisos generados")
         self.resize(760, 460)
         self._entradas = list(reversed(H.cargar()))
+        self._on_reutilizar = on_reutilizar
 
         fila_busqueda = QHBoxLayout()
-        fila_busqueda.addWidget(QLabel("Buscar cliente:"))
+        fila_busqueda.addWidget(QLabel("Buscar:"))
         self.txt_buscar = QLineEdit()
-        self.txt_buscar.setPlaceholderText("Escribe un nombre para filtrar…")
+        self.txt_buscar.setPlaceholderText("Cliente, plantilla, periodo o fecha…")
         self.txt_buscar.textChanged.connect(self._refrescar_tabla)
         fila_busqueda.addWidget(self.txt_buscar, 1)
 
@@ -41,6 +44,11 @@ class HistorialDialog(QDialog):
         btn_abrir.clicked.connect(self._abrir_pdf)
         btn_carpeta = QPushButton("Abrir carpeta")
         btn_carpeta.clicked.connect(self._abrir_carpeta)
+        btn_reutilizar = QPushButton("Crear otro igual")
+        btn_reutilizar.setObjectName("primario")
+        btn_reutilizar.clicked.connect(self._reutilizar)
+        btn_reutilizar.setVisible(on_reutilizar is not None)
+        fila_botones.addWidget(btn_reutilizar)
         fila_botones.addWidget(btn_abrir)
         fila_botones.addWidget(btn_carpeta)
         fila_botones.addStretch(1)
@@ -59,7 +67,9 @@ class HistorialDialog(QDialog):
     # ------------------------------------------------------------------
     def _refrescar_tabla(self) -> None:
         filtro = self.txt_buscar.text().strip().lower()
-        visibles = [e for e in self._entradas if filtro in e.cliente.lower()] if filtro else self._entradas
+        visibles = [e for e in self._entradas if filtro in " ".join((
+            e.fecha_hora, e.plantilla, e.periodo, str(e.anio), e.cliente, e.ruta
+        )).lower()] if filtro else self._entradas
         self._visibles = visibles
         self.tabla.setRowCount(len(visibles))
         for fila, e in enumerate(visibles):
@@ -76,6 +86,16 @@ class HistorialDialog(QDialog):
         if fila < 0:
             return None
         return Path(self._visibles[fila].ruta)
+
+    def _reutilizar(self) -> None:
+        fila = self._fila_seleccionada()
+        if fila < 0:
+            QMessageBox.information(self, "Selecciona un aviso",
+                                    "Selecciona primero el aviso que quieres reutilizar.")
+            return
+        if self._on_reutilizar:
+            self._on_reutilizar(self._visibles[fila])
+            self.accept()
 
     def _abrir_pdf(self) -> None:
         ruta = self._ruta_seleccionada()

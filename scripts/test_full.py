@@ -46,9 +46,13 @@ check("clientes se guardan y recargan (2)", len(clientes2) == 2)
 check("buscar cliente por nombre", C.buscar(clientes2, "juan pérez garcía") is not None)
 
 # --- historial ---
-H.registrar("Solicitud de documentación — Trimestre", "1T", 2026, "Juan Pérez García", r"C:\tmp\aviso.pdf")
+H.registrar("Solicitud de documentación — Trimestre", "1T", 2026, "Juan Pérez García",
+            r"C:\tmp\aviso.pdf", plantilla_id="solicitud_trim",
+            documentos=["Factura de prueba"], notas="Nota guardada")
 hist = H.cargar()
 check("historial registra entradas", len(hist) == 1)
+check("historial conserva datos para reutilizar el aviso",
+      hist[0].plantilla_id == "solicitud_trim" and hist[0].documentos == ["Factura de prueba"])
 
 # --- overrides de plantillas ---
 p = T.PLANTILLAS[0]
@@ -83,6 +87,23 @@ win._actualizar_preview()
 app.processEvents()
 check("MainWindow crea preview", win.preview.label.pixmap() is not None)
 
+# --- la rueda desplaza la pantalla, no cambia controles por accidente ---
+class _RuedaFalsa:
+    def __init__(self):
+        self.ignorada = False
+    def ignore(self):
+        self.ignorada = True
+
+anio_antes = win.spin_anio.value()
+evento_rueda = _RuedaFalsa()
+win.spin_anio.wheelEvent(evento_rueda)
+check("la rueda no cambia el año", win.spin_anio.value() == anio_antes and evento_rueda.ignorada)
+plantilla_antes = win.cmb_plantilla.currentIndex()
+evento_combo = _RuedaFalsa()
+win.cmb_plantilla.wheelEvent(evento_combo)
+check("la rueda no cambia la plantilla",
+      win.cmb_plantilla.currentIndex() == plantilla_antes and evento_combo.ignorada)
+
 # --- editor tipo Word: contenido inicial, dirty y regeneracion ---
 check("el editor arranca con el texto predefinido", "documentación" in win.editor.toPlainText())
 check("el editor no esta 'dirty' al arrancar", win._editor_dirty is False)
@@ -95,7 +116,8 @@ check("editar a mano marca el editor como modificado", win._editor_dirty is True
 win.txt_cliente.setText("Cliente De Prueba")
 app.processEvents()
 check("cambiar datos con texto editado no pisa el texto (muestra banner)",
-      "XYZ_EDICION_MANUAL" in win.editor.toPlainText() and win.banner_datos.isVisible())
+      "XYZ_EDICION_MANUAL" in win.editor.toPlainText() and not win.banner_datos.isHidden()
+      and "pendientes" in win.lbl_estado.text())
 # restaurar/regenerar descarta la edicion y aplica los datos
 win._regenerar_editor()
 app.processEvents()
@@ -121,16 +143,16 @@ X.guardar(extras_lista)
 check("la documentacion opcional se guarda y recarga", len(X.cargar()) == 1)
 
 win._refrescar_lista_extras()
-check("el checkbox aparece en el formulario", win.lista_extras.count() == 1)
-item_extra = win.lista_extras.item(0)
-check("el checkbox arranca desmarcado", item_extra.checkState() == Qt.Unchecked)
-check("txt_docs no se toca al marcar (no se mezcla con la lista base)",
-      "Escritura de venta." not in win.txt_docs.toPlainText())
+check("la etiqueta opcional aparece en el formulario", "Venta de bienes" in win._extra_buttons)
+item_extra = win._extra_buttons["Venta de bienes"]
+check("la etiqueta opcional arranca desmarcada", not item_extra.isChecked())
+check("la lista base no se toca al marcar un bloque opcional",
+      "Escritura de venta." not in "\n".join(win._documentos_actuales()))
 
-item_extra.setCheckState(Qt.Checked)
+item_extra.setChecked(True)
 app.processEvents()
 check("marcar el checkbox NO anade las lineas a la lista base de documentos",
-      "Escritura de venta." not in win.txt_docs.toPlainText())
+      "Escritura de venta." not in "\n".join(win._documentos_actuales()))
 check("marcar el checkbox aparece como bloque propio en el editor (no dirty)",
       "Escritura de venta." in win.editor.toPlainText())
 check("la frase introductoria tambien aparece", "En caso de venta:" in win.editor.toPlainText())
@@ -143,27 +165,27 @@ cuerpo_html_extra = T.render_cuerpo(ctx_extra, win._plantilla_actual())
 check("el bloque opcional genera su propia lista <ul> (dos <ul> en total)",
       cuerpo_html_extra.count("<ul") == 2)
 
-item_extra.setCheckState(Qt.Unchecked)
+item_extra.setChecked(False)
 app.processEvents()
 check("desmarcar el checkbox quita el bloque del editor",
       "Escritura de venta." not in win.editor.toPlainText())
 check("_contexto() ya no incluye el extra", len(win._contexto().documentos_extra) == 0)
 
 # restablecer la lista de documentos desmarca los checkboxes
-item_extra.setCheckState(Qt.Checked)
+item_extra.setChecked(True)
 app.processEvents()
 win._reset_docs()
 app.processEvents()
 check("restablecer la lista desmarca los checkboxes de opcionales",
-      win.lista_extras.item(0).checkState() == Qt.Unchecked)
+      not win._extra_buttons["Venta de bienes"].isChecked())
 
 # "Guardar como predeterminado" con un extra marcado no debe duplicar {documentos}
-item_extra.setCheckState(Qt.Checked)
+item_extra.setChecked(True)
 app.processEvents()
 _tit_extra, _cue_extra = R.documento_a_plantilla(win.editor.document(), win._contexto())
 check("guardar con un extra marcado no duplica el placeholder {documentos}",
       _cue_extra.count("{documentos}") == 1)
-item_extra.setCheckState(Qt.Unchecked)
+item_extra.setChecked(False)
 app.processEvents()
 
 dlg_extras = ExtrasDialog(win)
@@ -178,6 +200,17 @@ dlg_clientes.close()
 dlg_hist = HistorialDialog(win)
 check("HistorialDialog se construye", dlg_hist.tabla.rowCount() == 1)
 dlg_hist.close()
+win._reutilizar_historial(hist[0])
+app.processEvents()
+check("crear otro igual recupera documentos y notas del historial",
+      win._documentos_actuales() == ["Factura de prueba"]
+      and win.gb_notas.isChecked() and win.txt_notas.toPlainText() == "Nota guardada")
+win.gb_notas.setChecked(False)
+win.txt_notas.clear()
+win._set_docs(win._plantilla_actual().documentos_def)
+win.txt_cliente.clear()
+win._aplicar_periodo_sugerido()
+win._regenerar_editor()
 
 dlg_editor = PlantillaEditorDialog(win)
 app.processEvents()
@@ -185,7 +218,14 @@ check("PlantillaEditorDialog previsualiza", dlg_editor.preview.label.pixmap() is
 dlg_editor.close()
 
 carpeta_lote = tempfile.mkdtemp()
-dlg_lote = LoteDialog(win, win._contexto(), win._plantilla_actual(), carpeta_lote)
+from PySide6.QtGui import QTextCursor
+win.editor.moveCursor(QTextCursor.End)
+win.editor.textCursor().insertText(" CAMBIO_COMUN_LOTE")
+tpl_lote = R.documento_a_plantilla(win.editor.document(), win._contexto())
+check("el lote captura las ediciones manuales del documento actual",
+      "CAMBIO_COMUN_LOTE" in tpl_lote[1])
+dlg_lote = LoteDialog(win, win._contexto(), win._plantilla_actual(), carpeta_lote,
+                      documento_tpl=tpl_lote)
 from PySide6.QtCore import Qt as QtC
 for i in range(dlg_lote.lista.count()):
     dlg_lote.lista.item(i).setCheckState(QtC.Checked)
@@ -195,16 +235,17 @@ check("lote detecta los 2 clientes marcados", len(nombres) == 2)
 
 # Generar directamente sin pasar por QMessageBox (llamamos a la logica manualmente)
 from dataclasses import replace
-from avisos.render import render_pdf as _render_pdf
+from avisos.render import render_pdf_plantilla_texto as _render_pdf_lote
 from avisos.util import nombre_archivo as _nombre_archivo
 generados = 0
 for nombre in nombres:
     ctx = replace(win._contexto(), cliente=nombre)
     ruta = Path(carpeta_lote) / _nombre_archivo(win._plantilla_actual(), ctx)
-    _render_pdf(ctx, win._plantilla_actual(), ruta)
+    _render_pdf_lote(ctx, *tpl_lote, ruta)
     if ruta.exists():
         generados += 1
 check("lote genera un PDF por cliente", generados == 2)
+win._regenerar_editor()
 
 # --- version en el titulo ---
 from avisos import __version__ as _version
@@ -212,8 +253,8 @@ check("titulo incluye la version", f"v{_version}" in win.windowTitle())
 
 # --- periodo/anio sugerido segun fecha del sistema ---
 clave_esperada, anio_esperado = T.periodo_sugerido_hoy()
-check("combo periodo aplica el sugerido al abrir",
-      win.cmb_periodo.currentData() == clave_esperada or win._plantilla_actual().id == "cierre_anual")
+check("selector de periodo aplica el sugerido al abrir",
+      win._periodo_actual() == clave_esperada or win._plantilla_actual().id == "cierre_anual")
 
 # --- desplegables no cortan texto (popup mas ancho que el texto mas largo) ---
 ancho_max_texto = max(win.cmb_plantilla.fontMetrics().horizontalAdvance(win.cmb_plantilla.itemText(i))
@@ -322,6 +363,11 @@ check("restablecer vuelve a los valores de fabrica", est_restablecido == EST.Est
 dlg_formato = FormatoDialog(win)
 app.processEvents()
 check("FormatoDialog previsualiza", dlg_formato.preview.label.pixmap() is not None)
+tamano_antes = dlg_formato.spin_tamano.value()
+evento_formato = _RuedaFalsa()
+dlg_formato.spin_tamano.wheelEvent(evento_formato)
+check("la rueda no cambia el tamaño de letra",
+      dlg_formato.spin_tamano.value() == tamano_antes and evento_formato.ignorada)
 dlg_formato.close()
 
 # --- utilidades: nombre de archivo sin colision ---

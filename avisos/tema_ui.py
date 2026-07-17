@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from PySide6.QtGui import QColor, QPalette
 
+from . import config
+
 NAVY = "#0B3159"
 NAVY_HOVER = "#082745"
 INK = "#1E293B"
@@ -18,6 +20,7 @@ SOFT = "#F8FAFC"
 BORDER = "#DCE2E8"
 SUCCESS = "#2E6B43"
 WARNING = "#A16207"
+CHEVRON = config.asset("chevron-down.svg").as_posix()
 
 QSS = f"""
 QWidget {{ color: {INK}; font-family: "Segoe UI", "Inter", sans-serif; font-size: 13px; }}
@@ -32,11 +35,11 @@ QMenu::item:selected {{ background: #EDF4FA; color: {NAVY}; }}
 QFrame#cabecera {{ background: {NAVY}; border: none; }}
 QLabel#marca {{ color: white; font-size: 20px; font-weight: 700; }}
 QLabel#marcaSubtitulo {{ color: #C9D8E8; font-size: 11px; }}
-QLabel#pasoActivo {{
-    background: #E8F0F8; color: {NAVY}; border: 1px solid #BFD0E2;
-    border-radius: 14px; padding: 6px 11px; font-weight: 700;
+QPushButton#cabeceraAccion {{
+    background: transparent; color: #E7EFF7; border: 1px solid rgba(255,255,255,0.24);
+    padding: 7px 12px;
 }}
-QLabel#pasoInactivo {{ color: #D9E3ED; padding: 6px 8px; }}
+QPushButton#cabeceraAccion:hover {{ background: rgba(255,255,255,0.12); color: white; }}
 
 QFrame#tarjeta, QWidget#tarjeta {{
     background: {CARD}; border: 1px solid {BORDER}; border-radius: 10px;
@@ -65,13 +68,35 @@ QPushButton#exito {{ background: {SUCCESS}; color: white; border-color: {SUCCESS
 
 QLineEdit, QPlainTextEdit, QTextEdit, QComboBox, QSpinBox, QDateEdit, QListWidget {{
     background: {CARD}; border: 1px solid #C9D2DC; border-radius: 6px;
-    padding: 6px 8px; selection-background-color: {NAVY};
+    padding: 7px 9px; min-height: 22px; selection-background-color: {NAVY};
 }}
 QLineEdit:focus, QPlainTextEdit:focus, QTextEdit:focus, QComboBox:focus,
 QSpinBox:focus, QDateEdit:focus, QListWidget:focus {{ border-color: {NAVY}; }}
 QComboBox QAbstractItemView {{
     background: {CARD}; border: 1px solid {BORDER};
     selection-background-color: #E8F0F8; selection-color: {NAVY};
+    outline: 0; padding: 5px;
+}}
+QComboBox::drop-down {{ width: 32px; border: none; border-left: 1px solid #E2E7EC; }}
+QComboBox::down-arrow {{ image: url("{CHEVRON}"); width: 12px; height: 8px; }}
+QComboBox QAbstractItemView::item {{ min-height: 32px; padding: 7px 10px; }}
+QPushButton#segmento {{
+    border-radius: 5px; padding: 7px 10px; background: #F5F7FA;
+}}
+QPushButton#segmento:checked {{
+    background: {NAVY}; color: white; border-color: {NAVY};
+}}
+QToolButton#etiquetaOpcional {{
+    padding: 7px 10px; text-align: left; background: #F8FAFC;
+}}
+QToolButton#etiquetaOpcional:checked {{
+    background: #E5F1EA; color: {SUCCESS}; border-color: #91B59E;
+}}
+QListWidget#listaDocumentos::item {{
+    padding: 7px 5px; border-bottom: 1px solid #E8EDF2;
+}}
+QListWidget#listaDocumentos::item:selected {{
+    background: #E8F0F8; color: {NAVY};
 }}
 QTextEdit#editorDocumento {{ padding: 22px; }}
 QTabWidget::pane {{ background: {CARD}; border: 1px solid {BORDER}; border-radius: 8px; }}
@@ -84,6 +109,12 @@ QTabBar::tab:selected {{ background: {CARD}; color: {NAVY}; font-weight: 700; }}
 QScrollArea {{ border: none; background: transparent; }}
 QScrollArea > QWidget > QWidget {{ background: transparent; }}
 QSplitter::handle {{ background: {PAGE}; width: 8px; }}
+QFrame#barraAcciones {{
+    background: {CARD}; border-top: 1px solid {BORDER};
+}}
+QLabel#rutaDestino {{ color: {NAVY}; font-weight: 700; }}
+QLabel#estadoListo {{ color: {SUCCESS}; font-weight: 700; }}
+QLabel#estadoAviso {{ color: {WARNING}; font-weight: 700; }}
 QProgressBar {{
     background: #E6EBF0; border: none; border-radius: 5px;
     min-height: 9px; max-height: 9px; color: transparent;

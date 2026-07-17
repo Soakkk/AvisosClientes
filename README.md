@@ -17,11 +17,21 @@ periodo, año, fecha límite, nombre del cliente y la lista de documentos.
   - **Recordatorio de plazos — Cierre de trimestre**
   - **4.º Trimestre + Resumen Anual (cierre de ejercicio)** (con felicitación navideña opcional)
   - **Renta — Bienes arrendados**
+- **Panel de trabajo directo**: sin asistente por pasos. La plantilla, cliente,
+  periodo, fecha y documentación quedan a la izquierda; la vista previa real del
+  PDF permanece visible a la derecha y las acciones de guardado están siempre
+  disponibles en una barra inferior fija.
+- Selectores rediseñados, nombres de plantilla más legibles y periodos mediante
+  botones directos (`1T`, `2T`, `3T`, `4T`, `Renta`). La rueda del ratón desplaza
+  la pantalla, pero **no cambia accidentalmente** plantillas, años, fechas, fuentes
+  ni valores numéricos.
 - Periodo y **año se sugieren solos** según la fecha del sistema, y la **fecha límite**
   se calcula con la regla real de la AEAT: día 20 (o siguiente día hábil si cae en fin de
   semana o festivo nacional/Viernes Santo), y la fecha de **domiciliación** (ese día menos
   5 naturales), que es la que se usa por defecto en los avisos.
-- Lista de documentos editable y notas adicionales.
+- Lista de documentos por filas: añadir, quitar, editar y reordenar sin trabajar
+  sobre un bloque de texto. Las notas adicionales se mantienen plegadas cuando no
+  hacen falta.
 - **Editor del documento tipo Word**: el texto predefinido se carga ya resuelto (con
   cliente, periodo y fecha) y se puede **editar libremente** — añadir líneas y espacios,
   cambiar palabras, poner negrita/cursiva, viñetas… Si no se ha tocado a mano, al cambiar
@@ -38,21 +48,25 @@ periodo, año, fecha límite, nombre del cliente y la lista de documentos.
   añaden o quitan con un clic en cualquier tipo de aviso. Se insertan como su propio
   párrafo y su propia lista (no se mezclan con la lista de documentos base). Se gestionan
   desde Herramientas → Documentación opcional.
-- **Vista previa del PDF** en una pestaña, idéntica al PDF final, con aviso si el texto no
-  cabe en una sola página o si la fecha límite cae en fin de semana/festivo.
+- **Vista previa del PDF** como vista principal, idéntica al PDF final, con acceso
+  directo a la edición de contenido y aviso visible si el texto no cabe en una
+  sola página o si hay cambios del formulario pendientes de aplicar.
 - Cabecera con el logo, colores de marca y pie de página fijo en todos los avisos.
-- **Base de datos de clientes** (nombre, NIF, teléfono, email) con autocompletado en el
-  campo «Cliente» y relleno automático del NIF en el aviso. Los clientes nuevos se
-  añaden solos al generar un aviso a su nombre.
-- **Generar para varios clientes**: el mismo aviso (misma plantilla y mismos datos),
-  una copia en PDF individual por cada cliente elegido.
-- **Historial** de avisos generados, con búsqueda por cliente y acceso directo al PDF.
+- **Base de datos de clientes** (nombre, NIF, teléfono, email) con búsqueda por
+  nombre o NIF, alta y edición rápida desde el aviso y buscador en la gestión de
+  clientes. El NIF se rellena automáticamente en el aviso.
+- **Generar para varios clientes**: el mismo aviso, incluidas las modificaciones
+  manuales realizadas en el editor, una copia individual por cliente. Incluye
+  búsqueda por nombre/NIF, evita destinatarios duplicados y permite elegir carpeta.
+- **Historial reutilizable**: búsqueda por cliente, plantilla, periodo o fecha,
+  acceso al PDF y acción «Crear otro igual» para recuperar los datos y el texto
+  exactos del aviso guardado.
 - **Editor de plantillas** para cambiar los textos desde la propia aplicación, sin tocar código.
 - **Formato del documento** (Herramientas → Formato del documento…): fuente, tamaño de letra,
   interlineado y espacio entre párrafos configurables al estilo Word, con vista previa en
   vivo. Se guarda y se aplica a todos los avisos futuros.
-- **Generar y guardar PDF** guarda automáticamente en el Escritorio con el nombre del
-  cliente y el tipo de aviso (sin diálogo de guardado).
+- **Generar y guardar PDF** recuerda la carpeta elegida. Tras generarlo permite
+  abrir el PDF, abrir la carpeta o conservar los datos y cambiar solo de cliente.
 - **Comprobación de actualizaciones** contra los releases de GitHub (automática al abrir,
   o desde Ayuda → Buscar actualizaciones): descarga e instala la versión nueva con un clic.
   La consulta se hace en segundo plano (no congela la interfaz aunque la red vaya lenta).

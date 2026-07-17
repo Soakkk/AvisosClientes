@@ -252,6 +252,24 @@ def render_pdf(ctx: Contexto, plantilla: Plantilla, ruta: str | Path,
     render_pdf_documento(contenido, ruta, info=info, est=est)
 
 
+def render_pdf_plantilla_texto(ctx: Contexto, titulo_tpl: str, cuerpo_tpl: str,
+                               ruta: str | Path, info: dict | None = None,
+                               est: E.Estilo | None = None) -> None:
+    """Genera un PDF desde una instantanea editable de titulo y cuerpo.
+
+    Se usa en la generacion por lotes para conservar los cambios manuales del
+    editor y sustituir, aun asi, cliente, periodo, fecha y documentos en cada
+    copia individual.
+    """
+    from .templates import render_cuerpo_texto, render_titulo_texto
+
+    est = est or E.cargar()
+    titulo = render_titulo_texto(ctx, titulo_tpl)
+    cuerpo_html = render_cuerpo_texto(ctx, cuerpo_tpl)
+    render_pdf_documento(componer_documento(titulo, cuerpo_html, est), ruta,
+                         info=info, est=est)
+
+
 # ======================================================================
 #  Re-templatizacion: convertir el texto editado en el editor de vuelta a
 #  una plantilla (con placeholders), para "Guardar como predeterminado".

@@ -9,13 +9,14 @@ from typing import Callable
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
-    QDialogButtonBox, QDoubleSpinBox, QFontComboBox, QFormLayout, QHBoxLayout,
+    QDialogButtonBox, QFormLayout, QHBoxLayout,
     QLabel, QMessageBox, QPushButton, QSplitter, QVBoxLayout, QWidget,
 )
 
 from .. import estilo as E
 from .. import templates as T
 from ..render import render_preview_textos
+from .controles import DoubleSpinSinRueda, FuenteSinRueda
 from .preview_widget import PreviewPanel
 
 
@@ -35,22 +36,22 @@ class FormatoDialog(QWidget):
             "afecta a la letra."))
 
         form = QFormLayout()
-        self.cmb_fuente = QFontComboBox()
+        self.cmb_fuente = FuenteSinRueda()
         form.addRow("Fuente:", self.cmb_fuente)
 
-        self.spin_tamano = QDoubleSpinBox()
+        self.spin_tamano = DoubleSpinSinRueda()
         self.spin_tamano.setRange(8.0, 16.0)
         self.spin_tamano.setSingleStep(0.5)
         self.spin_tamano.setSuffix(" pt")
         form.addRow("Tamaño de letra:", self.spin_tamano)
 
-        self.spin_interlineado = QDoubleSpinBox()
+        self.spin_interlineado = DoubleSpinSinRueda()
         self.spin_interlineado.setRange(100.0, 160.0)
         self.spin_interlineado.setSingleStep(5.0)
         self.spin_interlineado.setSuffix(" %")
         form.addRow("Interlineado:", self.spin_interlineado)
 
-        self.spin_espacio_parrafo = QDoubleSpinBox()
+        self.spin_espacio_parrafo = DoubleSpinSinRueda()
         self.spin_espacio_parrafo.setRange(0.0, 16.0)
         self.spin_espacio_parrafo.setSingleStep(1.0)
         self.spin_espacio_parrafo.setSuffix(" pt")

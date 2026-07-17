@@ -6,16 +6,17 @@ from avisos.app import MainWindow
 
 app = QApplication([])
 win = MainWindow()
+win._comprobacion_inicial_hecha = True
 win.resize(1360, 880)
 win.show()
 
 def snap(nombre, w, h):
     win.resize(w, h)
     app.processEvents()
-    win._resize_timer.stop()
+    win.preview._resize_timer.stop()
     win._actualizar_preview()
     app.processEvents()
-    pix = win.preview.pixmap()
+    pix = win.preview.label.pixmap()
     print(nombre, w, "x", h, "-> preview px:", pix.width(), "x", pix.height())
     pix.save(nombre)
 

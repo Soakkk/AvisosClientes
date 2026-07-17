@@ -10,34 +10,47 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialog, QFileDialog, QHBoxLayout, QLabel, QListWidget, QListWidgetItem,
-    QMessageBox, QPlainTextEdit, QPushButton, QVBoxLayout,
+    QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QVBoxLayout,
 )
 
 from .. import clients as C
 from .. import history as H
-from ..render import render_pdf
+from .. import templates as T
+from ..render import render_pdf_plantilla_texto
 from ..templates import Contexto, Plantilla
 from ..util import nombre_archivo, ruta_sin_colision
 
 
 class LoteDialog(QDialog):
     def __init__(self, parent, ctx_base: Contexto, plantilla: Plantilla,
-                 carpeta_inicial: str) -> None:
+                 carpeta_inicial: str, documento_tpl: tuple[str, str] | None = None,
+                 extras_etiquetas: list[str] | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Generar para varios clientes")
         self.resize(520, 560)
         self._ctx_base = ctx_base
         self._plantilla = plantilla
         self._carpeta = carpeta_inicial
+        self._documento_tpl = documento_tpl or (
+            T.titulo_tpl_activo(plantilla), T.cuerpo_tpl_activo(plantilla))
+        self._extras_etiquetas = list(extras_etiquetas or [])
 
         info = QLabel(
             f"Se generará un PDF individual por cada cliente marcado, usando:\n"
             f"«{plantilla.nombre}» — {ctx_base.periodo_largo} de {ctx_base.anio}")
         info.setWordWrap(True)
 
+        self.txt_buscar = QLineEdit()
+        self.txt_buscar.setPlaceholderText("Buscar cliente por nombre o NIF…")
+        self.txt_buscar.setClearButtonEnabled(True)
+        self.txt_buscar.textChanged.connect(self._filtrar)
+
         self.lista = QListWidget()
         for c in sorted(C.cargar(), key=lambda x: x.nombre.lower()):
-            item = QListWidgetItem(c.nombre)
+            detalle = f" — {c.nif}" if c.nif else ""
+            item = QListWidgetItem(c.nombre + detalle)
+            item.setData(Qt.UserRole, c.nombre)
+            item.setData(Qt.UserRole + 1, f"{c.nombre} {c.nif}".lower())
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
             item.setCheckState(Qt.Unchecked)
             self.lista.addItem(item)
@@ -77,6 +90,7 @@ class LoteDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(info)
         layout.addWidget(QLabel("Clientes de la base de datos:"))
+        layout.addWidget(self.txt_buscar)
         layout.addWidget(self.lista, 1)
         layout.addLayout(fila_marcar)
         layout.addWidget(self.txt_sueltos)
@@ -89,7 +103,15 @@ class LoteDialog(QDialog):
 
     def _marcar_todos(self, estado) -> None:
         for i in range(self.lista.count()):
-            self.lista.item(i).setCheckState(estado)
+            item = self.lista.item(i)
+            if not item.isHidden():
+                item.setCheckState(estado)
+
+    def _filtrar(self, texto: str) -> None:
+        filtro = texto.strip().lower()
+        for i in range(self.lista.count()):
+            item = self.lista.item(i)
+            item.setHidden(bool(filtro and filtro not in item.data(Qt.UserRole + 1)))
 
     def _elegir_carpeta(self) -> None:
         carpeta = QFileDialog.getExistingDirectory(self, "Elegir carpeta destino", self._carpeta)
@@ -98,10 +120,17 @@ class LoteDialog(QDialog):
             self.lbl_carpeta.setText(carpeta)
 
     def _nombres_elegidos(self) -> list[str]:
-        nombres = [self.lista.item(i).text() for i in range(self.lista.count())
+        nombres = [self.lista.item(i).data(Qt.UserRole) for i in range(self.lista.count())
                    if self.lista.item(i).checkState() == Qt.Checked]
         sueltos = [ln.strip() for ln in self.txt_sueltos.toPlainText().splitlines() if ln.strip()]
-        return nombres + sueltos
+        resultado: list[str] = []
+        vistos: set[str] = set()
+        for nombre in nombres + sueltos:
+            clave = nombre.strip().lower()
+            if clave and clave not in vistos:
+                vistos.add(clave)
+                resultado.append(nombre.strip())
+        return resultado
 
     def _generar(self) -> None:
         nombres = self._nombres_elegidos()
@@ -120,8 +149,13 @@ class LoteDialog(QDialog):
             ctx = replace(self._ctx_base, cliente=nombre)
             ruta = ruta_sin_colision(carpeta, nombre_archivo(self._plantilla, ctx))
             try:
-                render_pdf(ctx, self._plantilla, ruta)
-                H.registrar(self._plantilla.nombre, ctx.periodo_corto, ctx.anio, nombre, str(ruta))
+                render_pdf_plantilla_texto(ctx, *self._documento_tpl, ruta)
+                H.registrar(
+                    self._plantilla.nombre, ctx.periodo_corto, ctx.anio, nombre, str(ruta),
+                    plantilla_id=self._plantilla.id, documentos=ctx.documentos,
+                    extras=self._extras_etiquetas, navidad=ctx.navidad, notas=ctx.notas,
+                    titulo_tpl=self._documento_tpl[0], cuerpo_tpl=self._documento_tpl[1],
+                )
                 C.asegurar_cliente(nombre)
                 generados += 1
             except Exception as e:
@@ -130,10 +164,13 @@ class LoteDialog(QDialog):
         mensaje = f"Se han generado {generados} de {len(nombres)} avisos en:\n{carpeta}"
         if errores:
             mensaje += "\n\nErrores:\n" + "\n".join(errores)
-        QMessageBox.information(self, "Generación en lote", mensaje)
-        resp = QMessageBox.question(
-            self, "Abrir carpeta", "¿Abrir la carpeta de destino?",
-            QMessageBox.Yes | QMessageBox.No)
-        if resp == QMessageBox.Yes:
+        caja = QMessageBox(self)
+        caja.setWindowTitle("Generación en lote")
+        caja.setIcon(QMessageBox.Information)
+        caja.setText(mensaje)
+        abrir = caja.addButton("Abrir carpeta", QMessageBox.ActionRole)
+        caja.addButton("Cerrar", QMessageBox.AcceptRole)
+        caja.exec()
+        if caja.clickedButton() is abrir:
             os.startfile(str(carpeta))  # type: ignore[attr-defined]
         self.accept()

@@ -60,6 +60,11 @@ class ClientesDialog(QDialog):
         self.resize(620, 440)
         self._clientes = C.cargar()
 
+        self.txt_buscar = QLineEdit()
+        self.txt_buscar.setPlaceholderText("Buscar por nombre, NIF, teléfono o email…")
+        self.txt_buscar.setClearButtonEnabled(True)
+        self.txt_buscar.textChanged.connect(self._refrescar_tabla)
+
         self.tabla = QTableWidget(0, 4)
         self.tabla.setHorizontalHeaderLabels(["Nombre", "NIF", "Teléfono", "Email"])
         self.tabla.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
@@ -86,6 +91,7 @@ class ClientesDialog(QDialog):
         cerrar.button(QDialogButtonBox.Close).clicked.connect(self.accept)
 
         layout = QVBoxLayout(self)
+        layout.addWidget(self.txt_buscar)
         layout.addWidget(self.tabla)
         layout.addLayout(fila_botones)
         layout.addWidget(cerrar)
@@ -93,10 +99,13 @@ class ClientesDialog(QDialog):
         self._refrescar_tabla()
 
     # ------------------------------------------------------------------
-    def _refrescar_tabla(self) -> None:
+    def _refrescar_tabla(self, *_args) -> None:
         self._clientes.sort(key=lambda c: c.nombre.lower())
-        self.tabla.setRowCount(len(self._clientes))
-        for fila, c in enumerate(self._clientes):
+        filtro = self.txt_buscar.text().strip().lower()
+        self._visibles = [c for c in self._clientes if filtro in " ".join((
+            c.nombre, c.nif, c.telefono, c.email)).lower()] if filtro else list(self._clientes)
+        self.tabla.setRowCount(len(self._visibles))
+        for fila, c in enumerate(self._visibles):
             for col, valor in enumerate([c.nombre, c.nif, c.telefono, c.email]):
                 self.tabla.setItem(fila, col, QTableWidgetItem(valor))
 
@@ -121,7 +130,7 @@ class ClientesDialog(QDialog):
         fila = self._fila_seleccionada()
         if fila < 0:
             return
-        original = self._clientes[fila]
+        original = self._visibles[fila]
         dlg = EditorClienteDialog(self, original)
         if dlg.exec() == QDialog.Accepted:
             self._clientes = C.upsert(self._clientes, dlg.cliente(), original.nombre)
@@ -132,7 +141,7 @@ class ClientesDialog(QDialog):
         fila = self._fila_seleccionada()
         if fila < 0:
             return
-        nombre = self._clientes[fila].nombre
+        nombre = self._visibles[fila].nombre
         resp = QMessageBox.question(
             self, "Eliminar cliente", f"¿Eliminar a «{nombre}»?",
             QMessageBox.Yes | QMessageBox.No)
